@@ -155,17 +155,21 @@
     </div>
     <div class="html-file-option-select">
         <label for="html-file-option">HTML File Option:</label>
-        <select id="html-file-option">
+        <select id="html-file-option" onchange="toggleHtmlCount('html-file-option','html-file-count')">
             <option value="single">Single HTML</option>
-            <option value="multiple">Multiple HTML (Max 3)</option>
+            <option value="multiple">Multiple HTML</option>
+            <option value="multiple-ai">Multiple HTML (Decided by AI)</option>
         </select>
+        <input type="number" id="html-file-count" min="2" value="2" style="display:none;" placeholder="Number of pages">
     </div>
-    <div class="html-file-option-select"></div>
+    <div class="html-file-option-select">
         <label for="edit-html-file-option">HTML File Option for Edit:</label>
-        <select id="edit-html-file-option">
+        <select id="edit-html-file-option" onchange="toggleHtmlCount('edit-html-file-option','edit-html-file-count')">
             <option value="single">Single HTML</option>
-            <option value="multiple">Multiple HTML (Max 3)</option>
+            <option value="multiple">Multiple HTML</option>
+            <option value="multiple-ai">Multiple HTML (Decided by AI)</option>
         </select>
+        <input type="number" id="edit-html-file-count" min="2" value="2" style="display:none;" placeholder="Number of pages">
     </div>
     <div id="error-section">
         <p id="error-message"></p>
@@ -179,6 +183,16 @@
         const imageUpload = document.getElementById('image-upload');
         const imagePreview = document.getElementById('image-preview');
         const generateButton = document.getElementById('generate-button');
+
+        function toggleHtmlCount(selectId, inputId) {
+            const option = document.getElementById(selectId).value;
+            const input = document.getElementById(inputId);
+            if (option === 'multiple') {
+                input.style.display = 'inline-block';
+            } else {
+                input.style.display = 'none';
+            }
+        }
 
         let currentImage = null;
 
@@ -404,6 +418,7 @@
             const model = document.getElementById('generate-code-model').value;
             const imageOption = document.getElementById('image-option').value;
             const htmlFileOption = document.getElementById('html-file-option').value;
+            const htmlPageCount = htmlFileOption === 'multiple' ? parseInt(document.getElementById('html-file-count').value) || 0 : null;
             const scriptMode = document.getElementById('script-mode').value;
             if (!userInput) {
                 alert('Please enter a prompt for code generation.');
@@ -416,7 +431,7 @@
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ prompt: userInput, model, scriptMode, imageOption, htmlFileOption }),
+            body: JSON.stringify({ prompt: userInput, model, scriptMode, imageOption, htmlFileOption, htmlPageCount }),
         });
         const data = await response.json();
         if (response.ok) {
@@ -446,6 +461,7 @@ async function continueCodeGeneration() {
     const model = document.getElementById('generate-code-model').value;
     const imageOption = document.getElementById('image-option').value;
     const htmlFileOption = document.getElementById('html-file-option').value;
+    const htmlPageCount = htmlFileOption === 'multiple' ? parseInt(document.getElementById('html-file-count').value) || 0 : null;
     const scriptMode = document.getElementById('script-mode').value;
 
     try {
@@ -454,7 +470,7 @@ async function continueCodeGeneration() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ model, scriptMode, imageOption, htmlFileOption }),
+            body: JSON.stringify({ model, scriptMode, imageOption, htmlFileOption, htmlPageCount }),
         });
         const data = await response.json();
         if (response.ok) {
@@ -502,6 +518,7 @@ async function continueCodeGeneration() {
             const model = document.getElementById('edit-code-model').value;
             const imageOption = document.getElementById('edit-image-option').value;
             const htmlFileOption = document.getElementById('edit-html-file-option').value;
+            const htmlPageCount = htmlFileOption === 'multiple' ? parseInt(document.getElementById('edit-html-file-count').value) || 0 : null;
             const scriptMode = document.getElementById('script-mode').value;
             if (!userInput) {
                 alert('Please enter a prompt for code editing.');
@@ -514,7 +531,7 @@ async function continueCodeGeneration() {
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ prompt: userInput, model, scriptMode, imageOption, htmlFileOption }),
+                    body: JSON.stringify({ prompt: userInput, model, scriptMode, imageOption, htmlFileOption, htmlPageCount }),
                 });
 
                 const data = await response.json();
@@ -542,6 +559,8 @@ async function continueCodeGeneration() {
             }
         });
         loadGeneratedScripts();
+        toggleHtmlCount('html-file-option','html-file-count');
+        toggleHtmlCount('edit-html-file-option','edit-html-file-count');
     </script>
 </body>
 </html>
