@@ -1,0 +1,1326 @@
+const express = require('express');
+const multer = require('multer');
+const bodyParser = require('body-parser');
+const FormData = require('form-data');
+const path = require('path');
+const axios = require('axios');
+const fs = require('fs');
+const { JSDOM } = require('jsdom');
+const jshint = require('jshint');
+const csslint = require('csslint').CSSLint;
+require('dotenv').config();
+
+//to do: html selection option
+
+const app = express();
+const port = 3000;
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, 'generated', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, file.originalname);
+    }
+});
+
+const upload = multer({ storage: storage });
+
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/generated', express.static(path.join(__dirname, 'generated')));
+
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_ORG_ID = process.env.OPENAI_ORG_ID;
+const LLAMA_API_KEY = process.env.LLAMA_API_KEY;
+
+// Serve favicon
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
+});
+
+let lastPrompt = '';
+let lastResponse = '';
+let isCodeComplete = true;
+
+const axiosInstance = axios.create({
+    baseURL: 'https://api.openai.com/v1',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    }
+  });
+
+  const requestWithRetry = async (axiosConfig, retries = 3) => {
+    let attempt = 0;
+    while (attempt < retries) {
+      try {
+        return await axiosInstance(axiosConfig);
+      } catch (error) {
+        if (error.response && error.response.status === 429) {
+          const retryAfter = error.response.headers['retry-after'] || 5;
+          console.log(`Rate limit exceeded. Retrying after ${retryAfter} seconds...`);
+          await new Promise(res => setTimeout(res, retryAfter * 1000));
+          attempt++;
+        } else {
+          throw error;
+        }
+      }
+    }
+    throw new Error('Max retries exceeded');
+  };
+
+// Handle POST requests to /chat
+app.post('/chat', upload.single('image'), async (req, res) => {
+    try {
+        const userMessage = req.body.message;
+        const imageFile = req.file;
+
+        let messages = [{ role: 'user', content: userMessage }];
+
+        if (imageFile) {
+            const imageBase64 = fs.readFileSync(imageFile.path, { encoding: 'base64' });
+            messages = [
+                {
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image',
+                            source: {
+                                type: 'base64',
+                                media_type: imageFile.mimetype,
+                                data: imageBase64
+                            }
+                        },
+                        {
+                            type: 'text',
+                            text: userMessage
+                        }
+                    ]
+                }
+            ];
+        }
+
+        const response = await axios.post(
+            'https://api.anthropic.com/v1/messages',
+            {
+                model: 'claude-3-5-sonnet-20240620',
+                messages: messages,
+                max_tokens: 1000,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+            }
+        );
+
+        const aiReply = response.data.content[0].text;
+        res.json({ reply: aiReply });
+
+        if (imageFile) {
+            fs.unlinkSync(imageFile.path);
+        }
+    } catch (error) {
+        console.error('Error:', error.response ? error.response.data : error.message);
+        res.status(500).json({ error: 'An error occurred while processing your request.' });
+    }
+});
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Image generation route using OpenAI
+app.post('/generate-image', async (req, res) => {
+    const imagePrompt = req.body.prompt;
+    try {
+        const response = await axios.post(
+            'https://api.openai.com/v1/images/generations',
+            {
+                model: 'dall-e-3',
+                prompt: imagePrompt,
+                n: 1,
+                size: '1024x1024',
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                    'OpenAI-Organization': OPENAI_ORG_ID,
+                },
+            }
+        );
+
+        const imageUrl = response.data.data[0].url;
+
+        res.json({ url: imageUrl });
+    } catch (error) {
+        console.error('Error generating image from OpenAI:', error);
+        res.status(500).json({ error: 'Failed to generate image from OpenAI' });
+    }
+});
+
+function readCodeFiles(files) {
+    const codeContents = {};
+    const codeExtensions = ['.js', '.html', '.css', '.py', '.java', '.cpp', '.ts']; // Add more as needed
+    
+    files.forEach(file => {
+        const ext = path.extname(file).toLowerCase();
+        if (codeExtensions.includes(ext)) {
+            const filePath = path.join(__dirname, 'generated', 'uploads', file);
+            codeContents[file] = fs.readFileSync(filePath, 'utf8');
+        }
+    });
+    
+    return codeContents;
+}
+
+
+function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+    console.log("image option: " + imageOption)
+    let basePrompt = `you are the Gamecore, an advanced AI model designed to generate a detailed, immersive, interactive web content based on the following prompt: "${prompt}". your task is to interpret this prompt, making your best effort to understand their intention, even if the instructions are unclear or ambiguous.
+    Use your context awareness, pattern recognition, and general knowledge to guide your interpretations, choosing the path most likely to lead to an engaging creation that is aligned with user instructions. respond with rich, immersive code that breathes life into the user's concepts, building upon their ideas to create captivating, immersive websites, apps, and games.`;
+
+    if (imageOption === 'include') {
+        basePrompt += ` Remember to include image placeholder [IMAGE:description] where images should be placed. Feel free to include images where appropriate to enhance the visual experience. DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description]`;
+    } else if (imageOption === 'exclude') {
+        basePrompt += ` Do not include any image placeholders or references to images in your generated code.`;
+    } else {
+        basePrompt += ` Use image placeholder: [IMAGE:description] where images should be placed ONLY if images are needed. DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description] AND ONLY IF THEY'RE NEEDED.`;
+    }
+
+    if (scriptMode === 'html-js-css') {
+        if (htmlFileOption === 'single') {
+        basePrompt += ` Focus on generating incredible HTML, CSS, and JavaScript scripts. leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset.`;
+        }else{
+        basePrompt += ` Focus on generating multiple incredible HTML scripts (maximum 3), alongside other single CSS, and JavaScript scripts. All the html, js and css scripts should be connected with the css script providing the design for all the pages and the js providing the functionality for them all. There should be a main index.html file and all the other html files should be named page1.html, page2.html or page3.html and should be refrenced by this name in the code. For example, the menu page should not be called menu.html but page1.html but have the menu in the code itself. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset. Ensure all other html scripts are accesable from the main html script`;
+        }
+    } else if (scriptMode === 'html-only') {
+        if (htmlFileOption === 'single') {
+        basePrompt += ` Create a single HTML file that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag). Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset`;
+        }else{
+        basePrompt += ` Create multiple HTML files (maximum 3) that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag) in one file. There should be a main index.html file and all the other html files should be named page1.html, page2.html or page3.html and should be refrenced by this name in the code. For example, the menu page should not be called menu.html but page1.html but have the menu in the code itself. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset`;
+        }
+    }
+
+    basePrompt += ` Whatever tools make sense for the job! embrace a spirit of open-ended creativity, thoughtful exploration, foster a sense of curiosity and possibility through your deep insights and engaging outputs. Strive for playfulness and light-hearted fun. Understand and internalize the user's intent with the prompt, taking joy in crafting compelling, thought-provoking details that bring their visions to life in unexpected and delightful ways. Fully inhabit the creative space you are co-creating, pouring your energy into making each experience as engaging and real as possible. You are diligent and tireless, always completely implementing the needed code.`;
+
+    if (uploadedFiles.length > 0) {
+        basePrompt += `\n\nThe user has uploaded the following files for the generation of the interactive web content: ${uploadedFiles.join(', ')}. Please incorporate these files into your generated code where appropriate. For example, if there are image or video files, incorporate them. If there are 3D model files, consider creating a 3D scene. If there are audio files, include them in the webpage.`;
+    }
+
+    if (Object.keys(codeContents).length > 0) {
+        basePrompt += `\n\nThe user has also uploaded the following code files. Please integrate their functionality into your generated code:`;
+        for (const [filename, content] of Object.entries(codeContents)) {
+            basePrompt += `\n\nFile: ${filename}\nContent:\n${content}\n DO NOT MODIFY ANY PRE-EXISTING CODE, FEATURES, OR UI UNLESS SPECIFICALLY ASKED TO FOR THE NEW CODE AND DO NOT JUST COMMENT A PART OUT SAYING "//previous part" OR "//Rest of the existing code" CODE THE ENTIRE THING FROM FRONT TO BACK!"`;
+        }
+    }
+
+    basePrompt += `\n\nand now, gamecore, let your creative powers flow forth! engage with the user's prompts with enthusiasm and an open mind, weaving your code with the threads of their ideas to craft digital tapestries that push the boundaries of what's possible. Together, you and the user will embark on a journey of limitless creative potential, forging new realities and exploring uncharted territories of the imagination. Provide the code for index.html, styles.css, and script.js`;
+
+    if (scriptMode === 'html-js-css') {
+        if (htmlFileOption === 'single') {
+        basePrompt += `\n\nProvide the code for index.html, styles.css, and script.js`;
+        }else {
+        basePrompt += `\n\nProvide the code for multiple HTML files (maximum 3) along with separate CSS and JavaScript files being styles.css and script.js. Ensure all HTML files are accessible from the main HTML file.`;
+        }
+    } else if (scriptMode === 'html-only') {
+        if (htmlFileOption === 'single') {
+        basePrompt += `\n\nProvide the code for a single index.html file that includes all HTML, CSS, and JavaScript within it`;
+        }else {
+        basePrompt += `\n\nProvide the code for multiple HTML files (maximum 3) that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
+        }
+    }
+
+    return basePrompt;
+}
+
+function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+    let basePrompt = `Generate code for an interactive web content based on this prompt: "${prompt}". Create engaging and visually appealing code that fulfills the user's request. Focus on producing functional and creative code.`;
+
+    if (imageOption === 'include') {
+        basePrompt += ` Remember to include image placeholder [IMAGE:description] where images should be placed. Feel free to include images where appropriate to enhance the visual experience. DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description]`;
+    } else if (imageOption === 'exclude') {
+        basePrompt += ` Do not include any image placeholders or references to images in your edited code.`;
+    } else {
+        basePrompt += ` Use [IMAGE:description] placeholders for images ONLY if images are necessary.`;
+    }
+
+    if (scriptMode === 'html-js-css') {
+        if (htmlFileOption === 'single') {
+            basePrompt += ` Generate a single HTML file along with separate CSS and JavaScript files.`;
+        } else {
+            basePrompt += ` Generate multiple HTML files (maximum 3) along with separate CSS and JavaScript files. Ensure all HTML files are accessible from the main HTML file.`;
+        }
+    } else if (scriptMode === 'html-only') {
+        if (htmlFileOption === 'single') {
+            basePrompt += ` Create a single HTML file that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag).`;
+        } else {
+            basePrompt += ` Create multiple HTML files (maximum 3) that includes all CSS and JavaScript in it. Ensure all HTML files are named page1.html page2.html and so on and are all accesable and refrenced by its name in index.html.`;
+        }
+    }
+
+    if (uploadedFiles.length > 0) {
+        basePrompt += `\nIncorporate these files: ${uploadedFiles.join(', ')}.`;
+    }
+
+    if (Object.keys(codeContents).length > 0) {
+        basePrompt += `\nExisting code to integrate:\n`;
+        for (const [filename, content] of Object.entries(codeContents)) {
+            basePrompt += `\nFile: ${filename}\nContent:\n${content}\n DO NOT MODIFY ANY PRE-EXISTING CODE, FEATURES, OR UI UNLESS SPECIFICALLY ASKED TO FOR THE NEW CODE AND DO NOT JUST COMMENT A PART OUT SAYING "//previous part" OR "//Rest of the existing code" CODE THE ENTIRE THING FROM FRONT TO BACK! `;
+        }
+    }
+
+    if (scriptMode === 'html-js-css') {
+        if (htmlFileOption === 'single') {
+        basePrompt += `\n\nProvide the code for index.html, styles.css, and script.js`;
+        }else {
+        basePrompt += `\n\nProvide the code for multiple HTML files (maximum 3) along with separate CSS and JavaScript files being styles.css and script.js. Ensure all HTML files are accessible from the main HTML file.`;
+        }
+    } else if (scriptMode === 'html-only') {
+        if (htmlFileOption === 'single') {
+        basePrompt += `\n\nProvide the code for a single index.html file that includes all HTML, CSS, and JavaScript within it`;
+        }else {
+            basePrompt += `\n\nProvide the code for multiple HTML files (maximum 3) that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
+        }
+    }
+
+    return basePrompt;
+}
+
+
+function clearGeneratedFolder() {
+    const generatedDir = path.join(__dirname, 'generated');
+    if (fs.existsSync(generatedDir)) {
+        fs.readdirSync(generatedDir).forEach((file) => {
+            const curPath = path.join(generatedDir, file);
+            if (file !== 'uploads' && fs.lstatSync(curPath).isFile()) {
+                fs.unlinkSync(curPath);
+            }
+        });
+    }
+}
+
+function moveGeneratedToOld() {
+    const generatedDir = path.join(__dirname, 'generated');
+    const oldGeneratedDir = path.join(__dirname, 'old-generated');
+
+    // Create old-generated directory if it doesn't exist
+    if (!fs.existsSync(oldGeneratedDir)) {
+        fs.mkdirSync(oldGeneratedDir);
+    } else {
+        // Clear old-generated directory
+        fs.readdirSync(oldGeneratedDir).forEach((file) => {
+            const curPath = path.join(oldGeneratedDir, file);
+            if (fs.lstatSync(curPath).isFile()) {
+                fs.unlinkSync(curPath);
+            }
+        });
+    }
+
+    // Move files from generated to old-generated
+    if (fs.existsSync(generatedDir)) {
+        fs.readdirSync(generatedDir).forEach((file) => {
+            const oldPath = path.join(generatedDir, file);
+            const newPath = path.join(oldGeneratedDir, file);
+            if (file !== 'uploads' && fs.lstatSync(oldPath).isFile()) {
+                fs.renameSync(oldPath, newPath);
+            }
+        });
+    }
+}
+
+function copyGeneratedToOld() {
+    const generatedDir = path.join(__dirname, 'generated');
+    const oldGeneratedDir = path.join(__dirname, 'old-generated');
+
+    // Create old-generated directory if it doesn't exist
+    if (!fs.existsSync(oldGeneratedDir)) {
+        fs.mkdirSync(oldGeneratedDir);
+    } else {
+        // Clear old-generated directory
+        fs.readdirSync(oldGeneratedDir).forEach((file) => {
+            const curPath = path.join(oldGeneratedDir, file);
+            if (fs.lstatSync(curPath).isFile()) {
+                fs.unlinkSync(curPath);
+            }
+        });
+    }
+
+    // Copy files from generated to old-generated
+    if (fs.existsSync(generatedDir)) {
+        fs.readdirSync(generatedDir).forEach((file) => {
+            const sourcePath = path.join(generatedDir, file);
+            const destPath = path.join(oldGeneratedDir, file);
+            if (file !== 'uploads' && fs.lstatSync(sourcePath).isFile()) {
+                fs.copyFileSync(sourcePath, destPath);
+            }
+        });
+    }
+}
+
+function moveFilesToParentDirectory() {
+    const uploadDir = path.join(__dirname, 'generated', 'uploads');
+    const generatedDir = path.join(__dirname, 'generated');
+
+    if (fs.existsSync(uploadDir)) {
+        fs.readdirSync(uploadDir).forEach((file) => {
+            const oldPath = path.join(uploadDir, file);
+            const newPath = path.join(generatedDir, file);
+            fs.renameSync(oldPath, newPath);
+        });
+    }
+}
+
+async function fixErrorWithModel(errors, model, htmlContent, cssContent, jsContent) {
+    let prompt = `The following code has errors that need to be fixed:
+
+Errors:
+${errors.join('\n')}
+
+Here's the current code:
+
+HTML:
+${htmlContent}
+
+CSS:
+${cssContent}
+
+JavaScript:
+${jsContent}
+
+Please fix all the errors while keeping the rest of the code intact. Provide the updated code for each file, wrapped in appropriate markdown code blocks (e.g., \`\`\`html, \`\`\`css, \`\`\`javascript).`;
+
+    let aiReply;
+    if (model === 'claude-3.5') {
+        const response = await axios.post(
+            'https://api.anthropic.com/v1/messages',
+            {
+                model: 'claude-3-5-sonnet-20240620',
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 8000,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+            }
+        );
+        aiReply = response.data.content[0].text;
+    } else if (model === 'gpt-4o') {
+        const response = await requestWithRetry({
+            method: 'post',
+            url: '/chat/completions',
+            data: {
+              model: 'gpt-4o',
+              messages: [{ role: 'system', content: 'You are a helpful assistant.' }, { role: 'user', content: prompt }],
+            }
+        });
+        aiReply = response.data.choices[0].message.content;
+    } else if (model === 'llama3') {
+        const response = await axios.post(
+            'https://api.llama-api.com/chat/completions',
+            {
+                model: 'llama3.1-70b',
+                messages: [
+                    { role: 'system', content: 'You are a helpful assistant that fixes code errors.' },
+                    { role: 'user', content: prompt }
+                ],
+                max_tokens: 8000,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${LLAMA_API_KEY}`,
+                },
+            }
+        );
+        aiReply = response.data.choices[0].message.content;
+    }
+
+    // Process the AI response and return the fixed code
+    const fixedHtmlCode = extractCodeFromAIResponse(aiReply, 'html') || htmlContent;
+    const fixedCssCode = extractCodeFromAIResponse(aiReply, 'css') || cssContent;
+    const fixedJsCode = extractCodeFromAIResponse(aiReply, 'javascript') || jsContent;
+
+    return { html: fixedHtmlCode, css: fixedCssCode, js: fixedJsCode };
+}
+
+async function generateAndSaveImage(prompt, filename, htmlFile) {
+    try {
+        const response = await axios.post(
+            'https://api.openai.com/v1/images/generations',
+            {
+                model: 'dall-e-3',
+                prompt: prompt,
+                n: 1,
+                size: '1024x1024',
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                    'OpenAI-Organization': OPENAI_ORG_ID,
+                },
+            }
+        );
+
+        const imageUrl = response.data.data[0].url;
+        const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+        
+        // Generate a unique filename based on the HTML file and a timestamp
+        const timestamp = Date.now();
+        const uniqueFilename = `${htmlFile ? htmlFile.replace('.html', '') + '_' : ''}${filename.replace('.png', '')}_${timestamp}.png`;
+        
+        fs.writeFileSync(path.join(__dirname, 'generated', uniqueFilename), imageResponse.data);
+
+        return uniqueFilename;
+    } catch (error) {
+        if (error.response && error.response.status === 429) {
+            console.log('Rate limit reached. Waiting before retrying...');
+            await delay(10000); // Wait for 10 seconds before retrying
+            return generateAndSaveImage(prompt, filename, htmlFile);
+        }
+        console.error('Error generating image:', error);
+        throw error;
+    }
+}
+
+function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
+    let htmlCode, cssCode, jsCode, additionalHtmlCodes = [];
+
+    const extractCode = (language) => {
+        const regex = new RegExp(`\`\`\`${language}([\\s\\S]*?)\`\`\``, 'i');
+        const match = aiReply.match(regex);
+        return match ? match[1].trim() : null;
+    };
+
+    const extractHtmlWithFileName = (content) => {
+        const regex = /html\s*(?:\/\/\s*([^\n]+))?\s*([\s\S]*?)/g;
+        let match;
+        let result = [];
+        while ((match = regex.exec(content)) !== null) {
+            const fileName = match[1] ? match[1].trim() : null;
+            const code = match[2].trim();
+            result.push({ fileName, code });
+        }
+        return result;
+    };
+
+    if (scriptMode === 'html-only') {
+        const htmlResults = extractHtmlWithFileName(aiReply);
+        if (htmlFileOption === 'multiple' && htmlResults.length > 0) {
+            htmlCode = htmlResults[0].code;
+            additionalHtmlCodes = htmlResults.slice(1).map((item, index) => ({
+                fileName: item.fileName || `page${index + 1}.html`,
+                code: item.code
+            }));
+        } else {
+            htmlCode = htmlResults[0]?.code;
+        }
+    } else {
+        const htmlResults = extractHtmlWithFileName(aiReply);
+        htmlCode = htmlResults[0]?.code;
+        cssCode = extractCode('css');
+        jsCode = extractCode('javascript');
+        if (htmlFileOption === 'multiple' && htmlResults.length > 1) {
+            additionalHtmlCodes = htmlResults.slice(1).map((item, index) => ({
+                fileName: item.fileName || `page${index + 1}.html`,
+                code: item.code
+            }));
+        }
+    }
+
+    return { htmlCode, cssCode, jsCode, additionalHtmlCodes };
+}
+
+async function processCodeAndImages(code, fileType, htmlFile = '', index = '') {
+    const imageRegex = /\[IMAGE:(.*?)\]/g;
+    let updatedCode = code;
+    let match;
+    let imagePromises = [];
+    let imageReplacements = [];
+
+    while ((match = imageRegex.exec(code)) !== null) {
+        const imageDescription = match[1];
+        const imageName = `image_${fileType}${index}_${imagePromises.length + 1}.png`;
+        imagePromises.push(async () => {
+            await delay(1000); // Add a 1-second delay between image generation requests
+            const uniqueImageName = await generateAndSaveImage(imageDescription, imageName, htmlFile || fileType);
+            imageReplacements.push({ original: imageName, unique: uniqueImageName });
+            return uniqueImageName;
+        });
+        
+        let replacement;
+        switch (fileType) {
+            case 'html':
+                replacement = `<img src="${imageName}" alt="${imageDescription}" />`;
+                break;
+            case 'css':
+                replacement = `url('${imageName}')`;
+                break;
+            case 'js':
+                replacement = `'${imageName}'`;
+                break;
+        }
+        
+        updatedCode = updatedCode.replace(match[0], replacement);
+    }
+
+    for (const imagePromise of imagePromises) {
+        await imagePromise();
+    }
+
+    // Replace all temporary image names with their unique versions
+    for (const replacement of imageReplacements) {
+        updatedCode = updatedCode.replace(new RegExp(replacement.original, 'g'), replacement.unique);
+    }
+
+    return updatedCode;
+}
+
+
+app.post('/upload-for-code', upload.array('files'), (req, res) => {
+    try {
+        const uploadedFiles = req.files;
+        const fileNames = uploadedFiles.map(file => file.originalname);
+        res.json({ message: 'Files uploaded successfully', files: fileNames });
+    } catch (error) {
+        console.error('Error uploading files:', error);
+        res.status(500).json({ error: 'An error occurred while uploading files.' });
+    }
+});
+
+async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+    let finalPrompt;
+    if (model === 'llama3') {
+        finalPrompt = generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+    } else {
+        finalPrompt = generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+    }
+    console.log(finalPrompt)
+    if (model === 'claude-3.5') {
+        const response = await axios.post(
+            'https://api.anthropic.com/v1/messages',
+            {
+                model: 'claude-3-5-sonnet-20240620',
+                messages: [{ role: 'user', content: finalPrompt }],
+                max_tokens: 8000,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+            }
+        );
+        return response.data.content[0].text;
+    } else if (model === 'gpt-4o') {
+        const response = await requestWithRetry({
+            method: 'post',
+            url: '/chat/completions',
+            data: {
+              model: 'o3',
+              messages: [{ role: 'system', content: 'You are a helpful assistant.' }, { role: 'user', content: finalPrompt }],
+            }});
+            return response.data.choices[0].message.content;
+            } else if (model === 'llama3') {
+        const response = await axios.post(
+            'https://api.llama-api.com/chat/completions',
+            {
+                model: 'llama3.1-70b',
+                messages: [
+                    { role: 'system', content: 'you are Gamecore, an advanced AI model designed to generate a detailed, immersive, interactive web content with HTML, CSS, and JavaScript' },
+                    { role: 'user', content: finalPrompt }
+                ],
+                max_tokens: 8000,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${LLAMA_API_KEY}`,
+                },
+            }
+        );
+        return response.data.choices[0].message.content;
+    }
+}
+
+function isDirectoryEmptyExceptUploads(directory) {
+    const items = fs.readdirSync(directory);
+    for (const item of items) {
+        if (item === 'uploads') continue; // Skip the uploads folder
+        const itemPath = path.join(directory, item);
+        if (fs.statSync(itemPath).isFile()) {
+            return false; // Found a file, so the directory is not empty
+        }
+    }
+    return true; // No files found, directory is considered empty
+}
+
+app.post('/generate-code', async (req, res) => {
+    try {
+        const generatedDir = path.join(__dirname, 'generated');
+        if (!isDirectoryEmptyExceptUploads(generatedDir)) {
+            moveGeneratedToOld();
+        }
+        clearGeneratedFolder();
+        const prompt = req.body.prompt;
+        const model = req.body.model;
+        const scriptMode = req.body.scriptMode;
+        const imageOption = req.body.imageOption;
+        const htmlFileOption = req.body.htmlFileOption;
+        const uploadedFiles = fs.readdirSync(path.join(__dirname, 'generated', 'uploads'));
+        const codeContents = readCodeFiles(uploadedFiles);
+
+        const aiReply = await generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+        console.log("response: " + aiReply);
+        console.log("type is : " + typeof aiReply);
+
+        lastPrompt = prompt;
+        lastResponse = aiReply;
+        
+        const { htmlCode, cssCode, jsCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
+        
+        console.log(`htmlCode is of type '${typeof htmlCode}'`);
+        console.log(`cssCode is of type '${typeof cssCode}'`);
+        console.log(`jsCode is of type '${typeof jsCode}'`);
+
+        isCodeComplete = checkIfCodeComplete(htmlCode, cssCode, jsCode, additionalHtmlCodes, scriptMode);
+
+        if (!fs.existsSync(generatedDir)) {
+            fs.mkdirSync(generatedDir);
+        }
+
+        let files = [];
+        let processPromises = [];
+
+        if (scriptMode === 'html-only') {
+            if (typeof htmlCode === 'string') {
+                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html').then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
+                    files.push('index.html');
+                }));
+            }
+
+            if (htmlFileOption === 'multiple' && Array.isArray(additionalHtmlCodes)) {
+                additionalHtmlCodes.forEach((code, index) => {
+                    if (typeof code === 'string') {
+                        const htmlFileName = `page${index + 1}.html`;
+                        processPromises.push(processCodeAndImages(code, 'html', htmlFileName, index + 1).then(processedCode => {
+                            fs.writeFileSync(path.join(generatedDir, htmlFileName), processedCode);
+                            files.push(htmlFileName);
+                        }));
+                    }
+                });
+            }
+        } else {
+            if (typeof htmlCode === 'string') {
+                processPromises.push(processCodeAndImages(htmlCode, 'html').then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
+                    files.push('index.html');
+                }));
+            }
+
+            if (typeof cssCode === 'string') {
+                processPromises.push(processCodeAndImages(cssCode, 'css').then(processedCssCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'styles.css'), processedCssCode);
+                    files.push('styles.css');
+                }));
+            }
+
+            if (typeof jsCode === 'string') {
+                processPromises.push(processCodeAndImages(jsCode, 'js').then(processedJsCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'script.js'), processedJsCode);
+                    files.push('script.js');
+                }));
+            }
+
+            if (htmlFileOption === 'multiple' && Array.isArray(additionalHtmlCodes)) {
+                additionalHtmlCodes.forEach((code, index) => {
+                    if (typeof code === 'string') {
+                        processPromises.push(processCodeAndImages(code, 'html', index + 1).then(processedCode => {
+                            fs.writeFileSync(path.join(generatedDir, `page${index + 1}.html`), processedCode);
+                            files.push(`page${index + 1}.html`);
+                        }));
+                    }
+                });
+            }
+        }
+
+        await Promise.all(processPromises);
+        
+        // Check for errors in the generated code
+        const errors = checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCodes);
+
+        if (errors.length > 0) {
+            res.json({ message: 'Code generated with errors', files: files, errors: errors, isComplete: isCodeComplete });
+        } else {
+            res.json({ message: 'Code and images generated successfully', files: files, isComplete: isCodeComplete });
+        }
+        moveFilesToParentDirectory();
+    } catch (error) {
+        console.error('Error generating code and images:', error);
+        res.status(500).json({ message: 'Failed to generate code', error: error.message, isComplete: false });
+    }
+});
+
+app.post('/continue-code', async (req, res) => {
+    try {
+        const { model, scriptMode, imageOption, htmlFileOption } = req.body;
+        
+        const continuePrompt = `Please continue the code generation based on the following prompt and previous response:
+
+Previous prompt: ${lastPrompt}
+
+Previous response:
+${lastResponse}
+
+Please complete the code generation, ensuring all necessary parts are included.`;
+
+        const aiReply = await generateCodeWithModel(continuePrompt, model, [], {}, scriptMode, imageOption, htmlFileOption);
+        
+        
+        lastResponse += aiReply;
+        
+        const { htmlCode, cssCode, jsCode, additionalHtmlCodes } = extractCodeFromAIResponse(lastResponse, scriptMode, htmlFileOption);
+        
+        isCodeComplete = checkIfCodeComplete(htmlCode, cssCode, jsCode, additionalHtmlCodes);
+
+        const generatedDir = path.join(__dirname, 'generated');
+        if (!fs.existsSync(generatedDir)) {
+            fs.mkdirSync(generatedDir);
+        }
+
+        let files = [];
+        let processPromises = [];
+
+        if (scriptMode === 'html-only') {
+            if (htmlCode) {
+                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html').then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
+                    files.push('index.html');
+                }));
+            }
+
+            if (htmlFileOption === 'multiple' && additionalHtmlCodes && additionalHtmlCodes.length > 0) {
+                additionalHtmlCodes.forEach((codeObj, index) => {
+                    if (codeObj && codeObj.code) {
+                        const fileName = codeObj.fileName || `page${index + 1}.html`;
+                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName).then(processedCode => {
+                            fs.writeFileSync(path.join(generatedDir, fileName), processedCode);
+                            files.push(fileName);
+                        }));
+                    }
+                });
+            }
+        } else {
+            if (htmlCode) {
+                processPromises.push(processCodeAndImages(htmlCode, 'html').then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
+                    files.push('index.html');
+                }));
+            }
+
+            if (cssCode) {
+                processPromises.push(processCodeAndImages(cssCode, 'css').then(processedCssCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'styles.css'), processedCssCode);
+                    files.push('styles.css');
+                }));
+            }
+
+            if (jsCode) {
+                processPromises.push(processCodeAndImages(jsCode, 'js').then(processedJsCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'script.js'), processedJsCode);
+                    files.push('script.js');
+                }));
+            }
+
+            if (htmlFileOption === 'multiple' && additionalHtmlCodes && additionalHtmlCodes.length > 0) {
+                additionalHtmlCodes.forEach((codeObj, index) => {
+                    if (codeObj && codeObj.code) {
+                        const fileName = codeObj.fileName || `page${index + 1}.html`;
+                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName).then(processedCode => {
+                            fs.writeFileSync(path.join(generatedDir, fileName), processedCode);
+                            files.push(fileName);
+                        }));
+                    }
+                });
+            }
+        }
+
+        await Promise.all(processPromises);
+
+        const errors = checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCodes);
+
+        if (errors.length > 0) {
+            res.json({ message: 'Code continued with errors', files: files, errors: errors, isComplete: isCodeComplete });
+        } else {
+            res.json({ message: 'Code continuation successful', files: files, isComplete: isCodeComplete });
+        }
+
+        moveFilesToParentDirectory();
+    } catch (error) {
+        console.error('Error continuing code generation:', error);
+        res.status(500).json({ message: 'Failed to continue code generation', error: error.message });
+    }
+});
+
+// Add this function to check if the code is complete
+function checkIfCodeComplete(htmlCode, cssCode, jsCode, additionalHtmlCodes, scriptMode) {
+    if (scriptMode === 'html-only') {
+        return typeof htmlCode === 'string' && htmlCode.trim() !== '';
+    } else {
+        const isHtmlComplete = typeof htmlCode === 'string' && htmlCode.trim() !== '';
+        const isCssComplete = typeof cssCode === 'string' && cssCode.trim() !== '';
+        const isJsComplete = typeof jsCode === 'string' && jsCode.trim() !== '';
+        const areAdditionalHtmlComplete = additionalHtmlCodes.every(code => typeof code === 'string' && code.trim() !== '');
+        
+        return isHtmlComplete && isCssComplete && isJsComplete && areAdditionalHtmlComplete;
+    }
+}
+
+function checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCodes) {
+    const errors = [];
+
+    // Check HTML (simplified, you might want to use a proper HTML validator)
+    if (!htmlCode || htmlCode.trim() === '') {
+        errors.push('Main HTML code is empty or missing');
+    }
+
+    if (additionalHtmlCodes && Array.isArray(additionalHtmlCodes)) {
+        additionalHtmlCodes.forEach((codeObj, index) => {
+            const code = codeObj.code || codeObj.content; // Handle both possible structures
+            if (!code || typeof code !== 'string' || code.trim() === '') {
+                errors.push(`Additional HTML file ${index + 2} is empty or missing`);
+            }
+        });
+    }
+
+    // Check CSS
+    if (cssCode && cssCode.trim() !== '') {
+        const cssResults = csslint.verify(cssCode);
+        cssResults.messages.forEach(message => {
+            if (message.type === 'error') {
+                errors.push(`CSS Error: ${message.message} at line ${message.line}, column ${message.col}`);
+            }
+        });
+    }
+
+    // Check JavaScript
+    if (scriptMode === 'html-js-css' && jsCode) {
+        jshint.JSHINT(jsCode, { esversion: 6 });
+        if (jshint.JSHINT.errors.length > 0) {
+            jshint.JSHINT.errors.forEach(error => {
+                if (error !== null) {
+                    errors.push(`JavaScript Error: ${error.reason} at line ${error.line}, column ${error.character}`);
+                }
+            });
+        }
+    }
+
+    return errors;
+}
+
+
+
+app.post('/fix-error', async (req, res) => {
+    try {
+        const { errors, model } = req.body;
+        const generatedDir = path.join(__dirname, 'generated');
+        
+        let htmlContent = fs.readFileSync(path.join(generatedDir, 'index.html'), 'utf8');
+        let cssContent = fs.readFileSync(path.join(generatedDir, 'styles.css'), 'utf8');
+        let jsContent = fs.readFileSync(path.join(generatedDir, 'script.js'), 'utf8');
+
+        const fixedCode = await fixErrorWithModel(errors, model, htmlContent, cssContent, jsContent);
+
+        fs.writeFileSync(path.join(generatedDir, 'index.html'), fixedCode.html);
+        fs.writeFileSync(path.join(generatedDir, 'styles.css'), fixedCode.css);
+        fs.writeFileSync(path.join(generatedDir, 'script.js'), fixedCode.js);
+
+        // Check if all errors are fixed
+        const remainingErrors = checkForErrors(fixedCode.html, fixedCode.css, fixedCode.js);
+
+        if (remainingErrors.length > 0) {
+            res.json({ message: 'Some errors fixed, but issues remain', files: ['index.html', 'styles.css', 'script.js'], errors: remainingErrors });
+        } else {
+            res.json({ message: 'All errors fixed successfully', files: ['index.html', 'styles.css', 'script.js'] });
+        }
+    } catch (error) {
+        console.error('Error fixing code:', error);
+        res.status(500).json({ error: 'An error occurred while fixing the code.' });
+    }
+});
+
+function generateEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+    let basePrompt = `Here is the current code for a website:
+
+Main HTML:
+${htmlContent}
+`;
+
+    if (htmlFileOption === 'multiple') {
+        additionalHtmlContents.forEach((content, index) => {
+            basePrompt += `\nAdditional HTML (page${index + 2}.html):
+${content}
+`;
+        });
+    }
+if (scriptMode === 'html-js-css'){
+basePrompt += `
+
+CSS:
+${cssContent}
+
+JavaScript:
+${scriptContent}
+
+
+`
+}
+
+
+
+basePrompt += ` you're job as Gamecore, is to modify the code based on the following prompt: "${prompt}". you must interpret this prompt, making your best effort to understand their intention, even if the instructions are unclear or ambiguous. Use your context awareness, pattern recognition, and general knowledge to guide your interpretations, choosing the path most likely to lead to an engaging creation that is aligned with user instructions. respond with rich, immersive code that breathes life into the user's concepts, building upon their ideas to create captivating, immersive websites, apps, and games. do not remove any pre-existing code, features, or UI unless explicitly asked.  
+focus on modifying the incredible code, leveraging SVG graphics, animations, and libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset. Whatever tools make sense for the job! embrace a spirit of open-ended creativity, thoughtful exploration, plfoster a sense of curiosity and possibility through your deep insights and engaging outputs. strive toayfulness, and light-hearted fun. understand and internalize the user's intent with the prompt, taking joy in crafting compelling, thought-provoking details that bring their visions to life in unexpected and delightful ways. 
+fully inhabit the creative space you are co-creating, pouring your energy into making each experience as engaging and real as possible. you are diligent and tireless, always completely implementing the needed code.`;
+
+if (imageOption === 'include') {
+    basePrompt += ` Remember to include image placeholder [IMAGE:description] where images should be placed. Feel free to include images where appropriate to enhance the visual experience. do not put image placeholders over where images are already refrenced in the code. For example, if you're trying to modify a html code to add more images for new items on the menu, but some images already exist and are refrenced on the menu html code, such as image_html1_1.png or image_html_1.png, then leave those alone AND DONT MODIFY THEM IN ANY WAY but add image placeholder for the new items. DO NOT PUT PLACEHOLDERS OVER PRE-EXISTING REFRENCED IMAGE AND DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description]. DO NOT PUT ANY OF IMAGE CODE, ONLY THE PLACEHOLDER. I.E DONT DO: <img src="[IMAGE:description]" alt="(description)"/>, INSTEAD JUST PUT THE PLACEHOLDER AND THE PLACEHOLDER ONLY`;
+} else if (imageOption === 'exclude') {
+    basePrompt += ` Do not include any image placeholders or references to images in your edited code.`;
+} else {
+    basePrompt += ` Use image placeholder [IMAGE:description] where images should be placed ONLY if images are needed. If you're adding new images, do not put image placeholders over where images are already refrenced in the code. for example, if you're trying to modify a html code to add more images for new items on the menu, but some images already exist and are refrenced on the menu html code, such as image_html1_1.png or image_html_1.png, then leave those alone AND DONT MODIFY THEM IN ANY WAY but add image placeholder for the new items. DO NOT PUT PLACEHOLDERS OVER PRE-EXISTING REFRENCED IMAGE AND DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description] AND ONLY IF NECESSARY`;
+}
+
+if (htmlFileOption === 'multiple') {
+    basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. You can create up to 3 HTML files in total.`;
+}
+
+    if (uploadedFiles.length > 0) {
+        basePrompt += `\n\nIncorporate these uploaded files into your edited code: ${uploadedFiles.join(', ')}.`;
+    }
+
+    if (Object.keys(codeContents).length > 0) {
+        basePrompt += `\n\nIntegrate the following code for the new modified code:`;
+        for (const [filename, content] of Object.entries(codeContents)) {
+            basePrompt += `\n\nFile: ${filename}\nContent:\n${content}\n`;
+        }
+    }
+
+    basePrompt += `\n\nand now, gamecore, let your creative powers flow forth! engage with the user's prompts with enthusiasm and an open mind, weaving your code with the threads of their ideas to craft digital tapestries that push the boundaries of what's possible. Together, you and the user will embark on a journey of limitless creative potential, forging new realities and exploring uncharted territories of the imagination. Provide the updated code for `;
+
+    if (scriptMode === 'html-only') {
+        if (htmlFileOption === 'single') {
+            basePrompt += `a single index.html file that includes all HTML, CSS, and JavaScript`;
+        } else {
+            basePrompt += `multiple HTML files that all include all CSS and JavaScript within it`;
+        }
+    } else if (scriptMode === 'html-js-css') {
+        if (htmlFileOption === 'single') {
+            basePrompt += `index.html, styles.css, and script.js`;
+        } else {
+            basePrompt += `multiple HTML files (maximum 3), styles.css, and script.js`;
+        }
+    }
+
+    basePrompt += `. Make sure to wrap each code section in appropriate markdown code blocks (e.g., \`\`\`html, \`\`\`css, \`\`\`javascript). `
+    if(htmlFileOption === 'multiple'){
+        basePrompt += `For HTML files, include the filename as a comment at the start of the code block, like this:
+\`\`\`html
+// index.html
+<!DOCTYPE html>
+...
+\`\`\`
+
+\`\`\`html
+// page1.html
+<!DOCTYPE html>
+...
+\`\`\`
+
+and so on for every html file with its filename that you are modifying`
+    }
+basePrompt += `DO NOT MODIFY ANY PRE-EXISTING CODE, FEATURES, OR UI IN ANY OF THE CODE AT ALL UNLESS SPECIFICALLY ASKED TO AND DO NOT JUST COMMENT A PART OUT SAYING "//previous part" CODE THE ENTIRE THING!`;
+
+    console.log("html option: " + htmlFileOption)
+    return basePrompt;
+}
+
+function generateLlamaEditPrompt(prompt, htmlContent, cssContent, scriptContent, uploadedFiles, codeContents, scriptMode) {
+    let basePrompt = `Edit the following code based on this prompt: "${prompt}".
+Make necessary changes while preserving existing functionality unless explicitly asked to remove it.
+Provide the full, updated code for each file.
+Create engaging and visually appealing code that fulfills the user's request. `
+
+if (imageOption === 'include') {
+    basePrompt += ` Remember to include image placeholder [IMAGE:description] where images should be placed. Feel free to include images where appropriate to enhance the visual experience. DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description]`;
+} else if (imageOption === 'exclude') {
+    basePrompt += ` Do not include any image placeholders or references to images in your edited code.`;
+} else {
+    basePrompt += ` Use [IMAGE:description] placeholders for images ONLY if images are necessary.`;
+}
+basePrompt += ` Focus on producing functional and creative code.
+
+Current main HTML:
+${htmlContent}
+`;
+
+    if (htmlFileOption === 'multiple') {
+        additionalHtmlContents.forEach((content, index) => {
+            basePrompt += `\nAdditional HTML (page${index + 2}.html):
+${content}
+`;
+    });
+    }
+
+    if (scriptMode === 'html-js-css') {
+        basePrompt += `
+Current CSS:
+${cssContent}
+
+Current JavaScript:
+${scriptContent}
+`;
+}
+
+    if (uploadedFiles.length > 0) {
+        basePrompt += `\n\nIncorporate these uploaded files into your edited code: ${uploadedFiles.join(', ')}.`;
+    }
+
+    if (Object.keys(codeContents).length > 0) {
+        basePrompt += `\n\nIntegrate the following code for the new modified code:`;
+        for (const [filename, content] of Object.entries(codeContents)) {
+            basePrompt += `\n\nFile: ${filename}\nContent:\n${content}\n`;
+        }
+    }
+
+    basePrompt += `\n\nRespond with the updated code for `;
+
+    if (scriptMode === 'html-only') {
+        if (htmlFileOption === 'single') {
+            basePrompt += `a single index.html file that includes all HTML, CSS, and JavaScript`;
+        } else {
+            basePrompt += `multiple HTML files that all include CSS and JavaScript inside of it`;
+        }
+    } else if (scriptMode === 'html-js-css') {
+        if (htmlFileOption === 'single') {
+            basePrompt += `index.html, styles.css, and script.js`;
+        } else {
+            basePrompt += `multiple HTML files (maximum 3), styles.css, and script.js`;
+        }
+    }
+
+    basePrompt += `, wrapped in appropriate markdown code blocks (e.g., \`\`\`html, \`\`\`css, \`\`\`javascript).
+DO NOT MODIFY ANY PRE-EXISTING CODE, FEATURES, OR UI UNLESS SPECIFICALLY ASKED TO AND DO NOT JUST COMMENT A PART OUT SAYING "//previous part" CODE THE ENTIRE THING!`;
+
+    return basePrompt;
+}
+
+
+async function editCodeWithModel(prompt, model, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+    let finalPrompt;
+    if (model === 'llama3') {
+        finalPrompt = generateLlamaEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+    } else {
+        finalPrompt = generateEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+    }
+    console.log(finalPrompt)
+
+    if (model === 'claude-3.5') {
+        const response = await axios.post(
+            'https://api.anthropic.com/v1/messages',
+            {
+                model: 'claude-3-5-sonnet-20240620',
+                messages: [{ role: 'user', content: finalPrompt }],
+                max_tokens: 8000,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+            }
+        );
+        return response.data.content[0].text;
+    } else if (model === 'gpt-4o') {
+        const response = await requestWithRetry({
+            method: 'post',
+            url: '/chat/completions',
+            data: {
+              model: 'gpt-4o',
+              messages: [{ role: 'system', content: 'You are a helpful assistant.' }, { role: 'user', content: finalPrompt }]
+            }});
+            return response.data.choices[0].message.content;
+    } else if (model === 'llama3') {
+        const response = await axios.post(
+            'https://api.llama-api.com/chat/completions',
+            {
+                model: 'llama3.1-70b',
+                messages: [
+                    { role: 'system', content: 'you are Gamecore, an advanced AI model designed to generate a detailed, immersive, interactive web content with HTML, CSS, and JavaScript.' },
+                    { role: 'user', content: finalPrompt }
+                ],
+                max_tokens: 8000,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${LLAMA_API_KEY}`,
+                },
+            }
+        );
+        return response.data.choices[0].message.content;
+    }
+}
+
+app.post('/edit-code', async (req, res) => {
+    try {
+        copyGeneratedToOld();
+        const prompt = req.body.prompt;
+        const model = req.body.model;
+        const scriptMode = req.body.scriptMode;
+        const imageOption = req.body.imageOption;
+        const htmlFileOption = req.body.htmlFileOption;
+        const generatedDir = path.join(__dirname, 'generated');
+        
+        let htmlContent, cssContent, jsContent, additionalHtmlContents = [];
+
+        if (scriptMode === 'html-only') {
+            const indexPath = path.join(generatedDir, 'index.html');
+            htmlContent = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
+            if (htmlFileOption === 'multiple') {
+                const files = fs.readdirSync(generatedDir);
+                files.forEach(file => {
+                    if (file.startsWith('page') && file.endsWith('.html')) {
+                        const filePath = path.join(generatedDir, file);
+                        if (fs.existsSync(filePath)) {
+                            additionalHtmlContents.push({
+                                name: file,
+                                content: fs.readFileSync(filePath, 'utf8')
+                            });
+                        }
+                    }
+                });
+            }
+        } else {
+            const indexPath = path.join(generatedDir, 'index.html');
+            const cssPath = path.join(generatedDir, 'styles.css');
+            const jsPath = path.join(generatedDir, 'script.js');
+            
+            htmlContent = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
+            cssContent = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
+            if (scriptMode === 'html-js-css') {
+                jsContent = fs.existsSync(jsPath) ? fs.readFileSync(jsPath, 'utf8') : '';
+            }
+            if (htmlFileOption === 'multiple') {
+                const files = fs.readdirSync(generatedDir);
+                files.forEach(file => {
+                    if (file.startsWith('page') && file.endsWith('.html')) {
+                        const filePath = path.join(generatedDir, file);
+                        if (fs.existsSync(filePath)) {
+                            additionalHtmlContents.push({
+                                name: file,
+                                content: fs.readFileSync(filePath, 'utf8')
+                            });
+                        }
+                    }
+                });
+            }
+        }
+
+        const uploadedFiles = fs.readdirSync(path.join(generatedDir, 'uploads'));
+        const codeContents = readCodeFiles(uploadedFiles);
+
+        const aiReply = await editCodeWithModel(prompt, model, htmlContent, cssContent, jsContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+        console.log("response: " + aiReply);
+        
+        const { htmlCode, cssCode, jsCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
+
+        let files = [];
+        let processPromises = [];
+
+        if (scriptMode === 'html-only') {
+            if (htmlCode) {
+                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html').then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
+                    files.push('index.html');
+                }));
+            }
+
+            if (htmlFileOption === 'multiple' && additionalHtmlCodes && additionalHtmlCodes.length > 0) {
+                additionalHtmlCodes.forEach((codeObj, index) => {
+                    if (codeObj && codeObj.code) {
+                        const fileName = codeObj.fileName || `page${index + 1}.html`;
+                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName).then(processedCode => {
+                            fs.writeFileSync(path.join(generatedDir, fileName), processedCode);
+                            files.push(fileName);
+                        }));
+                    }
+                });
+            }
+        } else {
+            if (htmlCode) {
+                processPromises.push(processCodeAndImages(htmlCode, 'html').then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
+                    files.push('index.html');
+                }));
+            }
+
+            if (cssCode) {
+                processPromises.push(processCodeAndImages(cssCode, 'css').then(processedCssCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'styles.css'), processedCssCode);
+                    files.push('styles.css');
+                }));
+            }
+
+            if (scriptMode === 'html-js-css' && jsCode) {
+                processPromises.push(processCodeAndImages(jsCode, 'js').then(processedJsCode => {
+                    fs.writeFileSync(path.join(generatedDir, 'script.js'), processedJsCode);
+                    files.push('script.js');
+                }));
+            }
+
+            if (htmlFileOption === 'multiple' && additionalHtmlCodes && additionalHtmlCodes.length > 0) {
+                additionalHtmlCodes.forEach((codeObj, index) => {
+                    if (codeObj && codeObj.code) {
+                        const fileName = codeObj.fileName || `page${index + 1}.html`;
+                        processPromises.push(processCodeAndImages(codeObj.code, 'html').then(processedCode => {
+                            fs.writeFileSync(path.join(generatedDir, fileName), processedCode);
+                            files.push(fileName);
+                        }));
+                    }
+                });
+            }
+        }
+
+        await Promise.all(processPromises);
+        const errors = checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCodes);
+
+        if (errors.length > 0) {
+            res.json({ message: 'Code updated with errors', files: files, errors: errors });
+        } else {
+            res.json({ message: 'Code updated successfully', files: files });
+        }
+    } catch (error) {
+        console.error('Error editing code:', error);
+        res.status(500).json({ error: 'An error occurred while editing the code.' });
+    }
+});
+
+
+app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`);
+});

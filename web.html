@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base href="https://gamecore.dev/">
+<title>GameCore - Multi-File Game Creator with AI</title>
+<style>
+   @import url('https://fonts.googleapis.com/css2?family=Roboto&family=Open+Sans&family=Lato&family=Montserrat&family=Oswald&family=Raleway&family=Poppins&family=Ubuntu&family=Nunito&family=Rubik&family=Merriweather&family=Indie+Flower&family=Inconsolata&family=Playfair+Display&family=Pacifico&family=Arvo&family=Fira+Sans&family=Zilla+Slab&family=Work+Sans&family=Lobster&family=Source+Sans+Pro&display=swap');
+
+    body, html {
+        margin: 0;
+        padding: 0;
+        font-family: monospace, Tahoma, Geneva, Verdana, sans-serif;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        background-color: #1e1e1e;
+        color: #e0e0e0;
+    }
+    .language-select {
+        margin-right: 10px;
+    }
+
+    .header {
+        background-color: #2c3e50;
+        color: #e0e0e0;
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+    .logo-container {
+        display: flex;
+        align-items: center;
+    }
+    .logo-container img {
+        height: 30px;
+        margin-right: 10px;
+    }
+    .logo {
+        font-size: 24px;
+        font-weight: bold;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    }
+    .top-right-buttons {
+        display: flex;
+        align-items: center;
+    }
+    .top-right-buttons button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 10px;
+        padding: 8px 12px;
+        font-size: 14px;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        background-color: #3c3c3c;
+        color: #e0e0e0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .top-right-buttons button:hover {
+        background-color: #1177bb;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .top-right-buttons img {
+        width: 20px;
+        height: 20px;
+        margin-right: 5px;
+        filter: brightness(0) invert(1);
+    }
+    .main-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+    }
+    .file-explorer {
+        display: flex;
+        flex-direction: column;
+        width: 220px;
+        background-color: #252526;
+        padding: 15px;
+        overflow-y: auto;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+    }
+    .button-container {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 15px;
+    }
+    #add-file-btn, #upload-file-btn {
+        flex: 0.5;
+        margin-right: 10px;
+        height: 100%;
+        padding: 10px;
+        font-size: 14px;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        background-color: #3c3c3c;
+        color: #e0e0e0;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    #upload-file-btn {
+        margin-right: 0;
+        flex: 0.5;
+    }
+    #add-file-btn:hover, #upload-file-btn:hover {
+        background-color: #1177bb;
+    }
+    #upload-file-btn img {
+        width: 15px;
+        height: 15px;
+        margin-right: 7px;
+        color: white;
+        filter: brightness(1000000);
+    }
+    .file-item {
+        cursor: pointer;
+        padding: 8px 12px;
+        margin-bottom: 5px;
+        background-color: #333333;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        color: #e0e0e0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .file-item:hover {
+        background-color: #3c3c3c;
+        transform: translateX(2px);
+    }
+    .file-item.active {
+        background-color: #0e639c;
+        color: #ffffff;
+        border-color: #1177bb;
+    }
+    .file-item .file-name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        max-width: calc(100% - 24px); /* Adjust as necessary */
+        position: relative;
+    }
+    .file-item .file-name:after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 30px;
+        height: 100%;
+        background: linear-gradient(to right, rgba(51, 51, 51, 0) 0%, #333333 100%);
+        pointer-events: none;
+        display: none; /* Initially hidden */
+    }
+    .file-item .file-name.long:after {
+        display: block; /* Show only when the file name is long */
+    }
+    .file-item.active .file-name:after {
+        background: linear-gradient(to right, rgba(14, 99, 156, 0) 0%, #0e639c 100%);
+    }
+    .dots {
+        cursor: pointer;
+        font-size: 18px;
+    }
+    .editor-container {
+        flex: 0.8;
+        display: flex;
+        flex-direction: column;
+        background-color: #1e1e1e;
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        margin: 15px;
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+    }
+    #editor {
+        flex: 1;
+        font-size: 14px;
+    }
+    #image-preview {
+        flex: 1;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        background-color: #1e1e1e;
+        flex-direction: column;
+        position: relative;
+    }
+    #image-preview img {
+        max-width: 100%;
+        max-height: 100%;
+    }
+    .html-reference {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    #html-filename {
+        width: 90%;
+        height: 60px;
+        margin-bottom: 10px;
+        font-family: 'Consolas', monospace;
+        padding: 10px;
+        background-color: #2e2e2e;
+        color: #e0e0e0;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        resize: none;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+        transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    #html-filename:focus {
+        background-color: #3c3c3c;
+        border-color: #1177bb;
+        outline: none;
+        box-shadow: 0 0 5px rgba(17, 119, 187, 0.5);
+    }
+
+    #copy-filename-btn {
+        padding: 8px 12px;
+        font-size: 14px;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        background-color: #3c3c3c;
+        color: #e0e0e0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    #copy-filename-btn:hover {
+        background-color: #1177bb;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+
+    .preview-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background-color: #1e1e1e;
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        margin: 15px 15px 15px 0;
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+    }
+    #preview {
+        flex: 1;
+        border: none;
+        background-color: #ffffff;
+    }
+
+    
+    #console {
+        height: 200px;
+        background-color: #1e1e1e;
+        color: #e0e0e0;
+        font-family: 'Consolas', monospace;
+        padding: 15px;
+        overflow-y: auto;
+        border-top: 1px solid #333;
+    }
+    /* Style for the container of the select element */
+.controls {
+    padding: 15px;
+    background-color: #252526;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #333;
+    position: absolute;
+    bottom: 0;
+    width: calc(100% - 20px); /* Adjusted width to include padding */
+    z-index: 1000;
+    margin-right: 10px; /* Add margin to ensure the select element is visible */
+}
+
+/* Style for the select element */
+select#active-html-select {
+    margin-right: 10px; /* Adjust the margin as needed */
+    padding: 10px 12px;
+    font-size: 14px;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    background-color: #3c3c3c;
+    color: #e0e0e0;
+    transition: all 0.2s ease;
+
+    margin-left: 3px;
+}
+
+/* Focus style for the select element */
+select#active-html-select:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(14,99,156,0.5);
+}
+
+
+    .controls button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        margin-right: 5px;
+    }
+    select, button, input {
+        padding: 8px 12px;
+        font-size: 14px;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        background-color: #3c3c3c;
+        color: #e0e0e0;
+        transition: all 0.2s ease;
+    }
+    button {
+        cursor: pointer;
+        background-color: #0e639c;
+        color: #ffffff;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    button img {
+        width: 20px;
+        height: 20px;
+        filter: brightness(0) invert(1);
+    }
+    button:hover {
+        background-color: #1177bb;
+    }
+    select:focus, button:focus, input:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(14,99,156,0.5);
+    }
+    .log {
+        margin-bottom: 5px;
+        padding: 5px;
+        border-radius: 3px;
+    }
+    .error {
+        color: #ff6b6b;
+        background-color: rgba(255,107,107,0.1);
+    }
+    .warn {
+        color: #feca57;
+        background-color: rgba(254,202,87,0.1);
+    }
+    .info {
+        color: #54a0ff;
+        background-color: rgba(84,160,255,0.1);
+    }
+    #add-file-btn {
+        width: 100%;
+        margin-bottom: 15px;
+    }
+    .menu {
+        position: absolute;
+        background-color: #333333;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        display: none;
+        z-index: 1000;
+    }
+    .menu-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .menu-item:hover {
+        background-color: #3c3c3c;
+    }
+    .settings-popup {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: #2c3e50;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        z-index: 1001;
+        width: 300px;
+    }
+    .settings-popup h2 {
+        margin-top: 0;
+        color: #e0e0e0;
+    }
+    .settings-popup label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        color: #e0e0e0;
+    }
+    .settings-popup .close-btn {
+        background-color: transparent;
+        color: #ffffff;
+        border: none;
+        font-size: 18px;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        cursor: pointer;
+    }
+    .slider-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+    }
+    .checkbox {
+        display: none;
+    }
+
+    .slider {
+        width: 60px;
+        height: 30px;
+        background-color: lightgray;
+        border-radius: 20px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        border: 4px solid transparent;
+        transition: .3s;
+        box-shadow: 0 0 10px 0 rgb(0, 0, 0, 0.25) inset;
+        cursor: pointer;
+    }
+
+    .slider::before {
+        content: '';
+        display: block;
+        width: 100%;
+        height: 100%;
+        background-color: #fff;
+        transform: translateX(-30px);
+        border-radius: 20px;
+        transition: .3s;
+        box-shadow: 0 0 10px 3px rgb(0, 0, 0, 0.25);
+    }
+
+    .checkbox:checked ~ .slider::before {
+        transform: translateX(30px);
+        box-shadow: 0 0 10px 3px rgb(0, 0, 0, 0.25);
+    }
+
+    .checkbox:checked ~ .slider {
+        background-color: #2196F3;
+    }
+
+    .checkbox:active ~ .slider::before {
+        transform: translate(0);
+    }
+    .confirmation-popup {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: #2c3e50;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        z-index: 1001;
+        width: 300px;
+        color: #e0e0e0;
+        text-align: center;
+    }
+    .confirmation-popup .close-btn {
+        background-color: transparent;
+        color: #ffffff;
+        border: none;
+        font-size: 18px;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        cursor: pointer;
+    }
+    .confirmation-popup button {
+        margin-top: 15px;
+        margin-right: 10px;
+    }
+
+    .toolbar {
+        display: flex;
+        gap: 10px;
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        background-color: #333;
+        padding: 10px;
+        border-radius: 5px;
+    }
+    .toolbar button {
+        background-color: #444;
+        border: none;
+        padding: 3px;
+        cursor: pointer;
+        color: #fff;
+    }
+    .toolbar button:hover {
+        background-color: #555;
+    }
+    .toolbar input[type="color"] {
+        width: 40px;
+        height: 40px;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+    }
+    .toolbar input[type="range"] {
+        width: 100px;
+    }
+    .audio-video-preview {
+        flex: 1;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        background-color: #1e1e1e;
+        flex-direction: column;
+        position: relative;
+        padding: 20px;
+    }
+    .controls-bottom {
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        background-color: #252526;
+        padding: 10px;
+        box-shadow: 0 -1px 5px rgba(0,0,0,0.3);
+    }
+    .fullscreen-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: #444;
+        border: none;
+        padding: 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        color: #fff;
+        z-index: 100;
+    }
+    .fullscreen-btn:hover {
+        background-color: #555;
+    }
+
+    .fullscreen-btn img {
+    width: 20px;
+    height: 20px;
+    filter: brightness(0) invert(1);
+}
+
+</style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo-container">
+            <div class="logo">GameCore AI</div>
+        </div>
+        <div class="top-right-buttons">
+            <button id="download-project-btn">
+                <img src="https://static-00.iconduck.com/assets.00/upload-icon-2048x2048-eu9n5hco.png" alt="Download">
+                Download Project
+            </button>
+            <button id="import-zip-btn">
+                <img src="https://cdn-icons-png.flaticon.com/512/69/69882.png" alt="Import">
+                Import Zip Project
+            </button>
+            <button id="settings-btn">
+                <img src="https://cdn-icons-png.flaticon.com/512/126/126472.png" alt="Settings">
+                Settings
+            </button>
+        </div>
+    </div>
+    <div class="main-container">
+        <div class="file-explorer" id="file-explorer">
+            <div class="button-container">
+                <button id="add-file-btn">Add File</button>
+                <input type="file" id="file-input" multiple style="display:none;">
+                <button id="upload-file-btn"><img src="https://static-00.iconduck.com/assets.00/upload-icon-2048x2048-eu9n5hco.png" alt="Upload">Upload</button>
+            </div>
+            <div id="file-list"></div>
+        </div>
+        <div class="editor-container">
+            <div class="controls">
+                <div style="display: flex; gap: 5px;">
+                    <button id="run-btn"><img src="https://cdn-icons-png.freepik.com/256/27/27223.png?semt=ais_hybrid" alt="Run"></button>
+                    <button id="save-btn"><img src="https://cdn-icons-png.flaticon.com/512/69/69539.png" alt="Save"></button>
+                    <button id="delete-file-btn"><img src="https://static-00.iconduck.com/assets.00/delete-icon-1877x2048-1t1g6f82.png" alt="Delete"></button>
+                    <button id="clear-console-btn"><img src="https://cdn-icons-png.freepik.com/512/67/67732.png" alt="Clear Console"></button>
+                </div>
+                <select id="active-html-select" style="margin-right: 10px;"></select>
+            </div>
+            <div id="editor"></div>
+            
+            <div id="image-preview">
+                <div class="toolbar">
+                    <button id="crop-btn">Crop</button>
+                    <input type="color" id="color-picker" value="#ff0000">
+                    <input type="range" id="stroke-width" min="1" max="10" value="2">
+                    <button id="pencil-btn">Pencil</button>
+                    <button id="eraser-btn">Eraser</button>
+                    <button id="undo-btn">Undo</button>
+                    <button id="redo-btn">Redo</button>
+                    <button id="zoom-in-btn">Zoom In</button>
+                    <button id="zoom-out-btn">Zoom Out</button>
+                    <button id="save-image-btn">Save</button>
+                    <button id="ai-button">AI</button>
+                </div>
+                <canvas id="canvas" style="border: 1px solid #ccc;"></canvas>
+                <div class="html-reference">
+                    <textarea id="html-filename" readonly></textarea>
+                    <button id="copy-filename-btn">Copy HTML Code</button>
+                </div>
+            </div>
+            <div class="audio-video-preview" id="audio-video-preview">
+                <audio id="audio-player" controls></audio>
+                <video id="video-player" controls></video>
+                <div class="html-reference">
+                    <textarea id="html-filename" readonly></textarea>
+                    <button id="copy-filename-btn">Copy HTML Code</button>
+                </div>
+            </div>
+            
+        </div>
+        <div class="preview-container" id="preview-container">
+            <iframe id="preview"></iframe>
+            <button class="fullscreen-btn" id="fullscreen-btn">
+                <img src="https://static-00.iconduck.com/assets.00/view-fullscreen-symbolic-icon-2048x2048-owdhjagk.png" alt="Fullscreen" style="width: 20px; height: 20px;">
+            </button>
+            
+            <div id="console"></div>
+        </div>
+    </div>
+
+    <div id="file-menu" class="menu">
+        <div id="rename-file" class="menu-item">Rename</div>
+        <div id="duplicate-file" class="menu-item">Duplicate</div>
+        <div id="delete-file" class="menu-item">Delete</div>
+    </div>
+
+    <!-- Settings Popup -->
+<div id="settings-popup" class="settings-popup">
+    <h2>Settings</h2>
+    <button class="close-btn" id="close-settings-btn">X</button>
+    <label>
+        Font Size:
+        <input type="range" id="font-size-slider" min="10" max="20" value="14">
+    </label>
+    <label>
+        Theme:
+        <select id="theme-select">
+            <optgroup label="Light Themes">
+                <option value="ace/theme/chrome">Chrome</option>
+                <option value="ace/theme/clouds">Clouds</option>
+                <option value="ace/theme/crimson_editor">Crimson Editor</option>
+                <option value="ace/theme/dawn">Dawn</option>
+                <option value="ace/theme/dreamweaver">Dreamweaver</option>
+                <option value="ace/theme/eclipse">Eclipse</option>
+                <option value="ace/theme/github">GitHub</option>
+                <option value="ace/theme/iplastic">IPlastic</option>
+                <option value="ace/theme/katzenmilch">KatzenMilch</option>
+                <option value="ace/theme/kuroir">Kuroir</option>
+                <option value="ace/theme/solarized_light">Solarized Light</option>
+                <option value="ace/theme/sqlserver">SQL Server</option>
+                <option value="ace/theme/textmate">TextMate</option>
+                <option value="ace/theme/tomorrow">Tomorrow</option>
+                <option value="ace/theme/xcode">XCode</option>
+            </optgroup>
+            <optgroup label="Dark Themes">
+                <option value="ace/theme/ambiance">Ambiance</option>
+                <option value="ace/theme/chaos">Chaos</option>
+                <option value="ace/theme/clouds_midnight">Clouds Midnight</option>
+                <option value="ace/theme/cobalt">Cobalt</option>
+                <option value="ace/theme/dracula">Dracula</option>
+                <option value="ace/theme/gob">Green on Black</option>
+                <option value="ace/theme/gruvbox">Gruvbox</option>
+                <option value="ace/theme/idle_fingers">idle Fingers</option>
+                <option value="ace/theme/kr_theme">krTheme</option>
+                <option value="ace/theme/merbivore">Merbivore</option>
+                <option value="ace/theme/merbivore_soft">Merbivore Soft</option>
+                <option value="ace/theme/mono_industrial">Mono Industrial</option>
+                <option value="ace/theme/monokai">Monokai</option>
+                <option value="ace/theme/pastel_on_dark">Pastel on Dark</option>
+                <option value="ace/theme/solarized_dark">Solarized Dark</option>
+                <option value="ace/theme/terminal">Terminal</option>
+                <option value="ace/theme/tomorrow_night">Tomorrow Night</option>
+                <option value="ace/theme/tomorrow_night_blue">Tomorrow Night Blue</option>
+                <option value="ace/theme/tomorrow_night_bright">Tomorrow Night Bright</option>
+                <option value="ace/theme/tomorrow_night_eighties">Tomorrow Night 80s</option>
+                <option value="ace/theme/twilight">Twilight</option>
+                <option value="ace/theme/vibrant_ink">Vibrant Ink</option>
+            </optgroup>
+        </select>
+    </label>
+    <label>
+        Font Family:
+        <select id="font-family-select">
+            <option value="monospace">Monospace</option>
+            <option value="'Roboto', sans-serif">Roboto</option>
+            <option value="'Open Sans', sans-serif">Open Sans</option>
+            <option value="'Lato', sans-serif">Lato</option>
+            <option value="'Montserrat', sans-serif">Montserrat</option>
+            <option value="'Oswald', sans-serif">Oswald</option>
+            <option value="'Raleway', sans-serif">Raleway</option>
+            <option value="'Poppins', sans-serif">Poppins</option>
+            <option value="'Ubuntu', sans-serif">Ubuntu</option>
+            <option value="'Nunito', sans-serif">Nunito</option>
+            <option value="'Rubik', sans-serif">Rubik</option>
+            <option value="'Merriweather', serif">Merriweather</option>
+            <option value="'Indie Flower', cursive">Indie Flower</option>
+            <option value="'Inconsolata', monospace">Inconsolata</option>
+            <option value="'Playfair Display', serif">Playfair Display</option>
+            <option value="'Pacifico', cursive">Pacifico</option>
+            <option value="'Arvo', serif">Arvo</option>
+            <option value="'Fira Sans', sans-serif">Fira Sans</option>
+            <option value="'Zilla Slab', serif">Zilla Slab</option>
+            <option value="'Work Sans', sans-serif">Work Sans</option>
+            <option value="'Lobster', cursive">Lobster</option>
+            <option value="'Source Sans Pro', sans-serif">Source Sans Pro</option>
+        </select>
+    </label>
+    <label>
+        Project Name:
+        <input type="text" id="zip-filename" placeholder="Enter filename">
+    </label>
+</div>
+<div id="aiModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Generate Image with AI</h2>
+      <textarea id="aiPrompt" placeholder="Enter your image description here..."></textarea>
+      <select id="aiSize">
+        <option value="1024x1024">1024x1024</option>
+        <option value="1792x1024">1792x1024</option>
+        <option value="1024x1792">1024x1792</option>
+      </select>
+      <button id="generateAiImage">Generate Image</button>
+    </div>
+  </div>
+  
+
+    <!-- Confirmation Popup -->
+    <div id="confirmation-popup" class="confirmation-popup">
+        <h3>Are you sure you want to import a new project? This will remove all existing files.</h3>
+        <button id="confirm-btn">Yes</button>
+        <button id="cancel-btn">No</button>
+        <button class="close-btn" id="close-confirmation-btn">X</button>
+    </div>
+
+    <!-- Unsupported File Type Popup -->
+    <div id="unsupported-popup" class="confirmation-popup">
+        <h3>Unsupported file type! Supported file types are: .png, .jpg, .jpeg, .gif, .mp3, .wav, .ogg, .mp4, .webm, .mov</h3>
+        <button id="add-anyway-btn">Add Anyway</button>
+        <button id="cancel-upload-btn">Cancel</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ext-language_tools.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ext-error_marker.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <script>
+        const editor = ace.edit("editor");
+        editor.setTheme("ace/theme/monokai");
+        editor.setOptions({
+            fontSize: "14px",
+            showPrintMargin: false,
+            highlightActiveLine: true,
+            enableLiveAutocompletion: true,
+            enableSnippets: true,
+            enableBasicAutocompletion: true
+        });
+        const OPENAI_API_KEY = 'TODO (get from server.js when combined)'
+        const runBtn = document.getElementById('run-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const deleteFileBtn = document.getElementById('delete-file-btn');
+        const addFileBtn = document.getElementById('add-file-btn');
+        const uploadFileBtn = document.getElementById('upload-file-btn');
+        const fileInput = document.getElementById('file-input');
+        const clearConsoleBtn = document.getElementById('clear-console-btn');
+        const fileMenu = document.getElementById('file-menu');
+        const renameFileMenu = document.getElementById('rename-file');
+        const duplicateFileMenu = document.getElementById('duplicate-file');
+        const deleteFileMenu = document.getElementById('delete-file');
+        const preview = document.getElementById('preview');
+        const consoleOutput = document.getElementById('console');
+        const fileList = document.getElementById('file-list');
+        const activeHtmlSelect = document.getElementById('active-html-select');
+        const imagePreview = document.getElementById('image-preview');
+        const audioVideoPreview = document.getElementById('audio-video-preview');
+        const htmlFilename = document.getElementById('html-filename');
+        const copyFilenameBtn = document.getElementById('copy-filename-btn');
+        const downloadProjectBtn = document.getElementById('download-project-btn');
+        const importZipBtn = document.getElementById('import-zip-btn');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsPopup = document.getElementById('settings-popup');
+        const closeSettingsBtn = document.getElementById('close-settings-btn');
+        const fontSizeSlider = document.getElementById('font-size-slider');
+        const themeSelect = document.getElementById('theme-select');
+        const fontFamilySelect = document.getElementById('font-family-select');
+        const zipFilenameInput = document.getElementById('zip-filename');
+        const confirmationPopup = document.getElementById('confirmation-popup');
+        const confirmBtn = document.getElementById('confirm-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const closeConfirmationBtn = document.getElementById('close-confirmation-btn');
+        const unsupportedPopup = document.getElementById('unsupported-popup');
+        const addAnywayBtn = document.getElementById('add-anyway-btn');
+        const cancelUploadBtn = document.getElementById('cancel-upload-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const previewContainer = document.getElementById('preview-container');
+
+        let files = {};
+        let currentFile = null;
+        let activeHtmlFile = null;
+        let selectedFile = null;
+        let unsupportedFile = null;
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+        let startX, startY, endX, endY;
+        let currentTool = 'pencil';
+        let color = '#ff0000';
+        let strokeWidth = 2;
+        let zoom = 1;
+        let history = [];
+        let historyIndex = -1;
+        let image = new Image();
+
+        function updateFileList() {
+            fileList.innerHTML = '';
+            Object.keys(files).forEach(filename => {
+                const fileItem = document.createElement('div');
+                fileItem.classList.add('file-item');
+                const fileNameContainer = document.createElement('div');
+                fileNameContainer.classList.add('file-name');
+                fileNameContainer.textContent = filename;
+                fileItem.appendChild(fileNameContainer);
+                fileItem.onclick = () => loadFile(filename);
+                if (filename === currentFile) {
+                    fileItem.classList.add('active');
+                }
+                const dots = document.createElement('span');
+                dots.classList.add('dots');
+                dots.textContent = '⋮';
+                dots.onclick = (event) => {
+                    event.stopPropagation();
+                    showMenu(event, filename);
+                };
+                fileItem.appendChild(dots);
+                fileList.appendChild(fileItem);
+
+                if (fileNameContainer.scrollWidth > fileNameContainer.clientWidth) {
+                    fileNameContainer.classList.add('long');
+                }
+            });
+            updateActiveHtmlSelect();
+        }
+
+        function showMenu(event, filename) {
+            selectedFile = filename;
+            fileMenu.style.display = 'block';
+            fileMenu.style.top = `${event.clientY}px`;
+            fileMenu.style.left = `${event.clientX}px`;
+        }
+
+        document.addEventListener('click', () => {
+            fileMenu.style.display = 'none';
+        });
+
+        renameFileMenu.onclick = () => {
+            const newFilename = prompt("Enter new file name (with extension):", selectedFile);
+            if (newFilename && newFilename !== selectedFile) {
+                files[newFilename] = files[selectedFile];
+                delete files[selectedFile];
+                if (currentFile === selectedFile) {
+                    currentFile = newFilename;
+                }
+                updateFileList();
+                loadFile(newFilename);
+            }
+        };
+
+        duplicateFileMenu.onclick = () => {
+            const newFilename = prompt("Enter new file name (with extension):", `${selectedFile}`);
+            if (newFilename) {
+                files[newFilename] = files[selectedFile];
+                updateFileList();
+            }
+        };
+
+        deleteFileMenu.onclick = () => {
+            if (selectedFile) {
+                delete files[selectedFile];
+                updateFileList();
+                if (currentFile === selectedFile) {
+                    currentFile = null;
+                    editor.setValue('');
+                    imagePreview.style.display = 'none';
+                    audioVideoPreview.style.display = 'none';
+                    editor.container.style.display = 'block';
+                }
+            }
+        };
+
+        function updateActiveHtmlSelect() {
+            activeHtmlSelect.innerHTML = '';
+            Object.keys(files).filter(f => f.endsWith('.html')).forEach(filename => {
+                const option = document.createElement('option');
+                option.value = filename;
+                option.textContent = filename;
+                activeHtmlSelect.appendChild(option);
+            });
+            if (activeHtmlFile) {
+                activeHtmlSelect.value = activeHtmlFile;
+            } else if (activeHtmlSelect.options.length > 0) {
+                activeHtmlFile = activeHtmlSelect.options[0].value;
+            }
+        }
+
+        function loadFile(filename) {
+            if (currentFile && !isImageFile(currentFile) && !isAudioFile(currentFile) && !isVideoFile(currentFile)) {
+                files[currentFile] = editor.getValue();
+            }
+            currentFile = filename;
+            if (isImageFile(filename)) {
+                editor.container.style.display = 'none';
+                audioVideoPreview.style.display = 'none';
+                imagePreview.style.display = 'flex';
+                const img = new Image();
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    image = img;
+                    saveHistory();
+                };
+                img.src = files[filename];
+                htmlFilename.value = `<img src="${filename}" alt="${filename}">`;
+            } else if (isAudioFile(filename)) {
+                editor.container.style.display = 'none';
+                imagePreview.style.display = 'none';
+                audioVideoPreview.style.display = 'flex';
+                const audioPlayer = document.getElementById('audio-player');
+                audioPlayer.src = files[filename];
+                audioPlayer.style.display = 'block';
+                const videoPlayer = document.getElementById('video-player');
+                videoPlayer.style.display = 'none';
+                htmlFilename.value = `<audio src="${filename}" controls></audio>`;
+            } else if (isVideoFile(filename)) {
+                editor.container.style.display = 'none';
+                imagePreview.style.display = 'none';
+                audioVideoPreview.style.display = 'flex';
+                const videoPlayer = document.getElementById('video-player');
+                videoPlayer.src = files[filename];
+                videoPlayer.style.display = 'block';
+                const audioPlayer = document.getElementById('audio-player');
+                audioPlayer.style.display = 'none';
+                htmlFilename.value = `<video src="${filename}" controls></video>`;
+            } else {
+                editor.container.style.display = 'block';
+                imagePreview.style.display = 'none';
+                audioVideoPreview.style.display = 'none';
+                editor.setValue(files[filename]);
+                editor.session.setMode(getFileMode(filename));
+            }
+            updateFileList();
+        }
+
+        function isImageFile(filename) {
+            return /\.(png|jpg|jpeg|gif)$/i.test(filename);
+        }
+
+        function isAudioFile(filename) {
+            return /\.(mp3|wav|ogg)$/i.test(filename);
+        }
+
+        function isVideoFile(filename) {
+            return /\.(mp4|webm|ogg|mov)$/i.test(filename);
+        }
+
+        function getFileMode(filename) {
+            const extension = filename.split('.').pop();
+            switch (extension) {
+                case 'html': return "ace/mode/html";
+                case 'css': return "ace/mode/css";
+                case 'js': return "ace/mode/javascript";
+                default: return "ace/mode/text";
+            }
+        }
+
+        addFileBtn.onclick = () => {
+            const filename = prompt("Enter file name (with extension):");
+            if (filename) {
+                files[filename] = '';
+                updateFileList();
+                loadFile(filename);
+            }
+        };
+
+        uploadFileBtn.onclick = () => {
+            fileInput.click();
+        };
+
+        fileInput.onchange = (event) => {
+            const fileList = event.target.files;
+            for (const file of fileList) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const content = e.target.result;
+                    const filename = file.name;
+                    if (isImageFile(filename) || isAudioFile(filename) || isVideoFile(filename)) {
+                        files[filename] = content;
+                    } else {
+                        unsupportedFile = { filename, content: e.target.result };
+                        unsupportedPopup.style.display = 'block';
+                    }
+                    updateFileList();
+                };
+                if (isImageFile(file.name) || isAudioFile(file.name) || isVideoFile(file.name)) {
+                    reader.readAsDataURL(file);
+                } else {
+                    reader.readAsText(file);
+                }
+            }
+        };
+
+        deleteFileBtn.onclick = () => {
+            if (currentFile) {
+                delete files[currentFile];
+                updateFileList();
+                currentFile = null;
+                editor.setValue('');
+                imagePreview.style.display = 'none';
+                audioVideoPreview.style.display = 'none';
+                editor.container.style.display = 'block';
+            }
+        };
+
+        clearConsoleBtn.onclick = () => {
+            consoleOutput.innerHTML = '';
+        };
+
+        function log(message, type = 'log') {
+            const logElement = document.createElement('div');
+            logElement.classList.add('log', type);
+            logElement.textContent = message;
+            consoleOutput.appendChild(logElement);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        function saveCurrentFile() {
+            if (currentFile && !isImageFile(currentFile) && !isAudioFile(currentFile) && !isVideoFile(currentFile)) {
+                files[currentFile] = editor.getValue();
+                log(`File ${currentFile} saved!`, 'info');
+            }
+        }
+
+        runBtn.onclick = () => {
+            saveCurrentFile();
+            consoleOutput.innerHTML = '';
+            
+            if (!activeHtmlFile) {
+                log('No active HTML file selected.', 'error');
+                return;
+            }
+
+            let htmlContent = files[activeHtmlFile];
+
+            htmlContent = htmlContent.replace(/<script\s+src="(.+?)"><\/script>/g, (match, src) => {
+                if (files[src]) {
+                    return `<script>${files[src]}<\/script>`;
+                }
+                return match;
+            });
+
+            htmlContent = htmlContent.replace(/<link\s+rel="stylesheet"\s+href="(.+?)">/g, (match, href) => {
+                if (files[href]) {
+                    return `<style>${files[href]}</style>`;
+                }
+                return match;
+            });
+
+            htmlContent = htmlContent.replace(/<img\s+src="(.+?)"/g, (match, src) => {
+                if (files[src]) {
+                    return `<img src="${files[src]}"`;
+                }
+                return match;
+            });
+
+            htmlContent = htmlContent.replace(/<audio\s+src="(.+?)"/g, (match, src) => {
+                if (files[src]) {
+                    return `<audio src="${files[src]}"`;
+                }
+                return match;
+            });
+
+            htmlContent = htmlContent.replace(/<video\s+src="(.+?)"/g, (match, src) => {
+                if (files[src]) {
+                    return `<video src="${files[src]}"`;
+                }
+                return match;
+            });
+
+            const fullContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <base href="https://codeflow.dev/">
+                    <script>
+                        const originalConsole = window.console;
+                        window.console = {
+                            log: function(...args) {
+                                window.parent.postMessage({type: 'log', message: args.join(' ')}, '*');
+                                originalConsole.log.apply(console, args);
+                            },
+                            warn: function(...args) {
+                                window.parent.postMessage({type: 'warn', message: args.join(' ')}, '*');
+                                originalConsole.warn.apply(console, args);
+                            },
+                            error: function(...args) {
+                                window.parent.postMessage({type: 'error', message: args.join(' ')}, '*');
+                                originalConsole.error.apply(console, args);
+                            }
+                        };
+                        window.onerror = function(message, source, lineno, colno, error) {
+                            window.parent.postMessage({type: 'error', message: message}, '*');
+                        };
+
+                        document.addEventListener('click', function(e) {
+                            const target = e.target.closest('a');
+                            if (target && target.getAttribute('href')) {
+                                const href = target.getAttribute('href');
+                                if (href.startsWith('http') || href.startsWith('//')) {
+                                    return;
+                                }
+                                e.preventDefault();
+                                window.parent.postMessage({type: 'navigate', url: href}, '*');
+                            }
+                        }, true);
+                    <\/script>
+                </head>
+                <body>
+                    ${htmlContent}
+                </body>
+                </html>
+            `;
+            preview.srcdoc = fullContent;
+        };
+
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type) {
+                if (event.data.type === 'navigate') {
+                    const newActiveFile = event.data.url;
+                    if (files[newActiveFile]) {
+                        activeHtmlFile = newActiveFile;
+                        activeHtmlSelect.value = newActiveFile;
+                        runBtn.click();
+                    } else {
+                        log(`File not found: ${newActiveFile}`, 'error');
+                    }
+                } else {
+                    log(event.data.message, event.data.type);
+                }
+            }
+        });
+
+        saveBtn.onclick = saveCurrentFile;
+
+        activeHtmlSelect.onchange = function() {
+            activeHtmlFile = this.value;
+        };
+
+        function getFileExtension(content) {
+    if (content.includes('<!DOCTYPE html>')) return 'html';
+    if (content.includes('function') || content.includes('var') || content.includes('let') || content.includes('const')) return 'js';
+    if (content.includes('{') && content.includes('}')) return 'css';
+    return 'txt';
+}
+
+
+        files['index.html'] = `<!DOCTYPE html>
+<html>
+<head>
+    <title>My Project</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>Welcome to CodeFlow!</h1>
+    <p>Go to <a href="page2.html">Page 2</a></p>
+    <img src="example.png" alt="Example Image">
+    <audio src="example.mp3" controls></audio>
+    <video src="example.mp4" controls></video>
+    <script src="script.js"><\/script>
+</body>
+</html>`;
+        files['page2.html'] = `<!DOCTYPE html>
+<html>
+<head>
+    <title>Page 2</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>This is Page 2</h1>
+    <p>Go back to <a href="index.html">Home</a></p>
+    <img src="example.png" alt="Example Image">
+    <script src="script.js"><\/script>
+</body>
+</html>`;
+        files['styles.css'] = `body {
+    font-family: Arial, sans-serif;
+    background-color: #2c2c2c;
+    color: #e0e0e0;
+}
+
+h1 {
+    color: #54a0ff;
+}`;
+        files['script.js'] = `console.log("Script loaded!");
+
+function greet(name) {
+    return \`Hello, \${name}!\`;
+}
+
+console.log(greet("User"));`;
+        files['example.png'] = 'data:image/png;base64,UklGRtwEAABXRUJQVlA4TM8EAAAvzwJlAG8AFIg/dS+G/vd//lMOuu7/uY2c31BpL4+zLe0BsdQC6q4icKkVsPcAvNQLUOcoQJ2jLjxA7H3BuaJztumgnOZpZkTODC/8qmVE/ydAFf4v/F/4v/B/4f/C/4X/C/8Xjz6Ep+Net+QLT3YqqCf60cJ/e3P69K033/+TYPFp6NeW7OoFMB/7lVuDAJvljFkPAqQ9tiDWa0h/hVcRso5pVcrUWpMqQvYxqWoWrnDqNmzOKXXUyg+UqlrZZVQirMgVoSLYHRNq29JjQu2z1CVU2VKLUMIS1nR6ANtzOvWsTekUWRvTqW1tRLMhnUKata2N6BTRrGNtQqeBtRmdYmtLOqnAklR8qlra9WHBlv2Wbnrw4CJbdiz970ETM7IMLM08KOE+WVRgRSr3ESDXZNlnpe9BDcCILKGVobvbAsAuWZLAgly5a0CfcUU1LNxX7gPDLbLctjBz14ZRrriiXs/UVe6rJgzJ8kBkkAt3t7HxDFlUM8Pnyn1jE2ZkUa+lurp2lwQpbrIleTXFxbVyHyKlXJFFJac3XFspDytpMGSLUp+cEpDnvlE+9pD6DF+USv5eKz/r6TAljLeJyHCTVzvIKFe0KmfBj6zqIPMZVu3LhimnYmGhz6kmLMoVpUo28COjIlhtMWrLDiZ8eiAs9fm0DctySaeSLfzIpgjWW2yq2cOES7eFgz6XGnAol0xKAhf4gUltOG0xqeoGEx4N4LjLm98y1V3JJWsGZ7IkgSv8wJo6JhlCOG+RJhHoZ6i4w5gzISCXqXrwsMuZCoDPUtV9kAvG9ADgWJpY+IDPGPOGhnGKHXh5jDCxMFxJUfYDY77swDzf0IGnXb6UN9zfsM8XvMGWDjbKtSEW3rzAln2bMDLswFtJllikOGOIWNVE2qmmSqQqpbppaHKqg9RypcWCUlvp8KOm9jHqgcjQMvQY1UTWiabKhCpl6hpCPkXIvtASQaeahc80VWfTA2Hh2FobsKkBmyNNVckUWNk1tLnUht2ZpgIq1SzdMmwz6TYsy5X2QBCpYQs/amqLR0lg7Yyhw6M27E80VaZR1UHf0GTRAA7lUosFieou8Jmm6hxKAifHDD0OhXA71lSFQhVHVwwhgwZwPdeSgEB1Z/c11eBPIpzJtXZb0CeE+5GmavQpe3DGELGnBx+nmiqR5w0vbhqa3ImFF3KpxYI6O/DzR03to07Zk5ahx5wOfJ1oqkycfd50DSFvYuENFloiaNOEv59pqk6bkkfH1tqANRF8HmmqSpotr3YNbc48EF5hpqmAMtvw+5ZhmzIlz+RKeyAIE8H3HzW1RZiady1Dhy8PhHeYaKpMlwb87xuadAlyIJdaLMjSRh4/01SdLNVcHDP0uHIb+RxrqkKVRk6uGEKmJEFOMNeSgCht5PW+phpEqeZGrrXbgiYD5HekqRpN6jk6Y4hYkgQ5wlRTJZKEyHPf0CRJJVdyqcWCIj3k+0dN7aNIPWctQ48hicgZxpoqEyRE3ruGkCDl3GGhJQE9esj/Z5qq02PfE+DYWhuwIxZPAIw0VSVHE0/CXUObHOUnAmaaCqjRwZPxlmGbGvueEHKlPRDESC48KSea+jvlNh2e3Ef3xPXCk50JT8O9bBX+L/xf+L/wf+H/wv+F/wv/F44FAA==';  // Add a base64 image string for example
+        files['example.mp3'] = 'data:audio/mp3;base64,//uQxAAADkRZAAAAAAASW5mbwAAAA8AAAAVAAAC6wYAAFZGQkwAAAAAAElOTk4AAAABAAACABYAAABQAAAAAQAAABAAVwAAAGFydGlzdAAAAAAUAAAC1gAAADJhZEwAAAAAAAADAAEAAdQAAAAAAc8AAAAFAAAAWiA=...'; // Add a base64 audio string for example
+        files['example.mp4'] = 'data:video/mp4;base64,AAAAFGZ0eXBpc28ybXA0AAAAAGlzb21pc28ybXA0AAAAAAoyNDBtcDQxAAAAHG1vb3YAAABsbXZoZAAAAABQAAACQAAAZGVzYzAAAAHGZyZWUAAABtbWZkYXRhAAAAIW1kYXQAAABEbWV0YQAAAAAobWlhdQAAAGRtZGlhAAAAFG10aHhkcAAAAAxoZGxyAAAAFHN0dHMAAAABAAAAaHBoaQAAAAAHc2Q6...'; // Add a base64 video string for example
+        files['example.mov'] = 'data:video/mov;base64,AAAAIGZ0eXBxdCAxAAAAAGlzb21tcDQxaXNvbSBtcDQyYXBwbAAAAAAAAAAAAAAAAAAAAAFSAAABEAABACAAAAGi6JmICQAAAAAAF3d2AAI8AAAAAAA1ZXh0cnEAAAADc2QAAEwAAABQAAAASQAAADkAAAABAAAASwAAAABAAAAAFAAAAAAAAEwAAAAFAAAAUAAAABUAAAAWAAAAAEAAAACc3QxQQAAAEAAAAABABEAAgAAAAEAAAARAB4ABAAFAABOAAAAAQAFAHIAAAAJAAIAAgAAAAEABAAIAAAAAQAAAAgAAAAAAAAAAAAFAABIAAIAAAAABgQAAAAaAAAAAABAAAA...'; // Add a base64 video string for example
+        
+        updateFileList();
+        loadFile('index.html');
+        activeHtmlFile = 'index.html';
+
+        // Drag and drop functionality
+        const fileExplorer = document.getElementById('file-explorer');
+
+        fileExplorer.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+            fileExplorer.style.border = '2px dashed #1177bb';
+        });
+
+        fileExplorer.addEventListener('dragleave', () => {
+            fileExplorer.style.border = 'none';
+        });
+
+        fileExplorer.addEventListener('drop', (event) => {
+            event.preventDefault();
+            fileExplorer.style.border = 'none';
+            const items = event.dataTransfer.items;
+            for (const item of items) {
+                if (item.kind === 'file') {
+                    const file = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const content = e.target.result;
+                        const filename = file.name;
+                        if (isImageFile(filename) || isAudioFile(filename) || isVideoFile(filename)) {
+                            files[filename] = content;
+                        } else {
+                            unsupportedFile = { filename, content: e.target.result };
+                            unsupportedPopup.style.display = 'block';
+                        }
+                        updateFileList();
+                    };
+                    if (isImageFile(file.name) || isAudioFile(file.name) || isVideoFile(file.name)) {
+                        reader.readAsDataURL(file);
+                    } else {
+                        reader.readAsText(file);
+                    }
+                }
+            }
+        });
+
+        copyFilenameBtn.onclick = () => {
+            htmlFilename.select();
+            document.execCommand('copy');
+        };
+
+        // Download project as zip
+        downloadProjectBtn.onclick = () => {
+            const zip = new JSZip();
+            const zipFilename = zipFilenameInput.value || 'project';
+            for (const [filename, content] of Object.entries(files)) {
+                if (isImageFile(filename) || isAudioFile(filename) || isVideoFile(filename)) {
+                    const base64Data = content.split(',')[1];
+                    zip.file(filename, base64Data, { base64: true });
+                } else {
+                    zip.file(filename, content);
+                }
+            }
+            zip.generateAsync({ type: 'blob' }).then((content) => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(content);
+                a.download = `${zipFilename}.zip`;
+                a.click();
+            });
+        };
+
+        // Show settings popup
+        settingsBtn.onclick = () => {
+            settingsPopup.style.display = 'block';
+        };
+
+        // Close settings popup
+        closeSettingsBtn.onclick = () => {
+            settingsPopup.style.display = 'none';
+        };
+
+        // Change font size
+fontSizeSlider.oninput = () => {
+    const fontSize = fontSizeSlider.value + 'px';
+    editor.setOptions({
+        fontSize: fontSize
+    });
+};
+
+// Change theme
+themeSelect.onchange = () => {
+    const theme = themeSelect.value;
+    editor.setTheme(theme);
+};
+
+// Change font family
+fontFamilySelect.onchange = () => {
+    const fontFamily = fontFamilySelect.value;
+    editor.setOptions({
+        fontFamily: fontFamily
+    });
+};
+
+
+        // Import Zip Project
+        importZipBtn.onclick = () => {
+            confirmationPopup.style.display = 'block';
+        };
+
+        confirmBtn.onclick = () => {
+            confirmationPopup.style.display = 'none';
+            const zipInput = document.createElement('input');
+            zipInput.type = 'file';
+            zipInput.accept = '.zip';
+            zipInput.style.display = 'none';
+            document.body.appendChild(zipInput);
+            zipInput.onchange = (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    JSZip.loadAsync(file).then((zip) => {
+                        files = {};  // Clear current files
+                        zip.forEach((relativePath, zipEntry) => {
+                            zipEntry.async('base64').then((content) => {
+                                const fileType = relativePath.split('.').pop().toLowerCase();
+                                if (['png', 'jpg', 'jpeg', 'gif', 'mp3', 'wav', 'ogg', 'mp4', 'webm', 'mov'].includes(fileType)) {
+                                    files[relativePath] = `data:${fileType};base64,${content}`;
+                                } else {
+                                    zipEntry.async('string').then((content) => {
+                                        files[relativePath] = content;
+                                        updateFileList();
+                                    });
+                                }
+                            });
+                        });
+                        log('Project imported successfully!', 'info');
+                    }).catch((error) => {
+                        log(`Error importing project: ${error.message}`, 'error');
+                    });
+                }
+            };
+            zipInput.click();
+        };
+
+        cancelBtn.onclick = () => {
+            confirmationPopup.style.display = 'none';
+        };
+
+        closeConfirmationBtn.onclick = () => {
+            confirmationPopup.style.display = 'none';
+        };
+
+        addAnywayBtn.onclick = () => {
+            if (unsupportedFile) {
+                files[unsupportedFile.filename] = unsupportedFile.content;
+                updateFileList();
+                unsupportedPopup.style.display = 'none';
+            }
+        };
+
+        cancelUploadBtn.onclick = () => {
+            unsupportedPopup.style.display = 'none';
+        };
+
+        // Canvas drawing and cropping functionality
+        canvas.addEventListener('mousedown', (e) => {
+            drawing = true;
+            startX = e.offsetX / zoom;
+            startY = e.offsetY / zoom;
+            if (currentTool === 'crop') {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(image, 0, 0);
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!drawing) return;
+            endX = e.offsetX / zoom;
+            endY = e.offsetY / zoom;
+            if (currentTool === 'pencil') {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = strokeWidth;
+                ctx.lineCap = 'round';
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(endX, endY);
+            } else if (currentTool === 'eraser') {
+                ctx.clearRect(endX - strokeWidth / 2, endY - strokeWidth / 2, strokeWidth, strokeWidth);
+            } else if (currentTool === 'crop') {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(image, 0, 0);
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            drawing = false;
+            ctx.beginPath();
+            if (currentTool === 'crop') {
+                const cropWidth = endX - startX;
+                const cropHeight = endY - startY;
+                const croppedImage = ctx.getImageData(startX, startY, cropWidth, cropHeight);
+                canvas.width = cropWidth;
+                canvas.height = cropHeight;
+                ctx.putImageData(croppedImage, 0, 0);
+                image = new Image();
+                image.src = canvas.toDataURL();
+                saveHistory();
+            }
+        });
+
+        document.getElementById('color-picker').addEventListener('change', (e) => {
+            color = e.target.value;
+        });
+
+        document.getElementById('stroke-width').addEventListener('input', (e) => {
+            strokeWidth = e.target.value;
+        });
+
+        document.getElementById('pencil-btn').addEventListener('click', () => {
+            currentTool = 'pencil';
+        });
+
+        document.getElementById('eraser-btn').addEventListener('click', () => {
+            currentTool = 'eraser';
+        });
+
+        document.getElementById('crop-btn').addEventListener('click', () => {
+            currentTool = 'crop';
+        });
+
+        document.getElementById('undo-btn').addEventListener('click', () => {
+            if (historyIndex > 0) {
+                historyIndex--;
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    image.src = canvas.toDataURL();
+                };
+                img.src = history[historyIndex];
+            }
+        });
+
+        document.getElementById('redo-btn').addEventListener('click', () => {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    image.src = canvas.toDataURL();
+                };
+                img.src = history[historyIndex];
+            }
+        });
+
+        document.getElementById('zoom-in-btn').addEventListener('click', () => {
+            zoom *= 1.2;
+            applyZoom();
+        });
+
+        document.getElementById('zoom-out-btn').addEventListener('click', () => {
+            zoom /= 1.2;
+            applyZoom();
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.1;
+            const rect = canvas.getBoundingClientRect();
+            const offsetX = (e.clientX - rect.left) / zoom;
+            const offsetY = (e.clientY - rect.top) / zoom;
+            if (e.deltaY < 0) {
+                zoom *= zoomFactor;
+            } else {
+                zoom /= zoomFactor;
+            }
+            applyZoom(offsetX, offsetY);
+        });
+
+        function applyZoom(centerX = canvas.width / 2, centerY = canvas.height / 2) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(centerX * (1 - zoom), centerY * (1 - zoom));
+            ctx.scale(zoom, zoom);
+            ctx.drawImage(image, 0, 0);
+            ctx.restore();
+        }
+
+        function saveHistory() {
+            history.push(canvas.toDataURL());
+            historyIndex = history.length - 1;
+        }
+
+        document.getElementById('save-image-btn').addEventListener('click', () => {
+            if (currentFile && isImageFile(currentFile)) {
+                files[currentFile] = canvas.toDataURL();
+                log(`Image ${currentFile} saved!`, 'info');
+            }
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+                event.preventDefault();
+                saveCurrentFile();
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+                event.preventDefault();
+                runBtn.click();
+            }
+        });
+
+        // Fullscreen functionality
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                previewContainer.requestFullscreen().catch(err => {
+                    log(`Error attempting to enable fullscreen mode: ${err.message}`, 'error');
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        });
+
+        // Listen for fullscreen change events
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                fullscreenBtn.querySelector('img').src = 'https://cdn.icon-icons.com/icons2/2098/PNG/512/minimize_icon_128810.png';
+                fullscreenBtn.querySelector('img').alt = 'Exit Fullscreen';
+            } else {
+                fullscreenBtn.querySelector('img').src = 'https://static-00.iconduck.com/assets.00/view-fullscreen-symbolic-icon-2048x2048-owdhjagk.png';
+                fullscreenBtn.querySelector('img').alt = 'Fullscreen';
+            }
+        });
+        document.getElementById("ai-button").onclick = function() {
+    document.getElementById("aiModal").style.display = "block";
+};
+
+document.querySelector(".close").onclick = function() {
+    document.getElementById("aiModal").style.display = "none";
+};
+
+document.getElementById("generateAiImage").onclick = async function() {
+    const prompt = document.getElementById("aiPrompt").value;
+    const size = document.getElementById("aiSize").value;
+
+    try {
+        const response = await fetch('/generate-image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            },
+            body: JSON.stringify({ prompt, size })
+        });
+
+        const data = await response.json();
+        if (data.url) {
+            alert('Image generated successfully!');
+            // Handle the display or use of the generated image URL
+            console.log('Generated Image URL:', data.url);
+        } else {
+            alert('Failed to generate image');
+        }
+    } catch (error) {
+        console.error('Error generating image:', error);
+        alert('Failed to generate image');
+    }
+
+    document.getElementById("aiModal").style.display = "none";
+};
+
+app.post('/generate-image', async (req, res) => {
+    const { prompt, size } = req.body;
+
+    try {
+        const response = await requestWithRetry({
+            method: 'post',
+            url: '/images/generations',
+            headers: {
+                'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            },
+            data: {
+                model: "dall-e-3",
+                prompt: prompt,
+                n: 1,
+                size: size || "1024x1024" // Default to 1024x1024 if no size is provided
+            }
+        });
+
+        const imageUrl = response.data.data[0].url;
+        res.json({ url: imageUrl });
+    } catch (error) {
+        console.error('Error generating image from OpenAI:', error);
+        res.status(500).json({ error: 'Failed to generate image from OpenAI' });
+    }
+});
+    </script>
+</body>
+</html>
