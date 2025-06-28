@@ -144,6 +144,7 @@
         <select id="script-mode">
             <option value="html-js-css">HTML, JS, CSS</option>
             <option value="html-only">HTML Only</option>
+            <option value="flask">Flask</option>
         </select>
     <div class="image-option-select">
         <label for="edit-image-option">Image Option for Edit:</label>
@@ -309,7 +310,7 @@
 
         function loadGeneratedScripts() {
             const scriptMode = document.getElementById('script-mode').value;
-            if (scriptMode === 'html-js-css') {
+            if (scriptMode === 'html-js-css' || scriptMode === 'flask') {
                 fetch('/generated/script.js')
                     .then(response => response.text())
                     .then(scriptContent => {

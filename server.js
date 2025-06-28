@@ -245,6 +245,12 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
         } else {
             basePrompt += `\n\nProvide the code for multiple HTML files that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
         }
+    } else if (scriptMode === 'flask') {
+        if (htmlFileOption === 'multiple') {
+            basePrompt += `\n\nProvide the code for app.py, multiple HTML template files (maximum ${htmlPageCount}), styles.css, and script.js if needed.`;
+        } else {
+            basePrompt += `\n\nProvide the code for app.py, index.html template, styles.css, and script.js if needed.`;
+        }
     }
 
     return basePrompt;
@@ -277,6 +283,11 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
         } else {
             basePrompt += ` Create multiple HTML files that includes all CSS and JavaScript in it. Ensure all HTML files are named page1.html page2.html and so on and are all accesable and refrenced by its name in index.html.`;
         }
+    } else if (scriptMode === 'flask') {
+        basePrompt += ` Generate a Flask application with app.py as the backend. Templates must be inside a templates directory and use /static/ paths via the {% static %} convention for CSS. Place all CSS and JavaScript in a static directory and reference images from /assets/.`;
+        if (htmlFileOption === 'multiple') {
+            basePrompt += ` Generate multiple HTML template files (maximum ${htmlPageCount}) with a main index.html.`;
+        }
     }
 
     if (uploadedFiles.length > 0) {
@@ -306,6 +317,12 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
         } else {
             basePrompt += `\n\nProvide the code for multiple HTML files that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
         }
+    } else if (scriptMode === 'flask') {
+        if (htmlFileOption === 'multiple') {
+            basePrompt += `\n\nProvide the code for app.py, multiple HTML templates, styles.css, and script.js if used.`;
+        } else {
+            basePrompt += `\n\nProvide the code for app.py, index.html template, styles.css, and script.js if used.`;
+        }
     }
 
     return basePrompt;
@@ -317,8 +334,8 @@ function clearGeneratedFolder() {
     if (fs.existsSync(generatedDir)) {
         fs.readdirSync(generatedDir).forEach((file) => {
             const curPath = path.join(generatedDir, file);
-            if (file !== 'uploads' && fs.lstatSync(curPath).isFile()) {
-                fs.unlinkSync(curPath);
+            if (file !== 'uploads') {
+                fs.rmSync(curPath, { recursive: true, force: true });
             }
         });
     }
@@ -335,20 +352,18 @@ function moveGeneratedToOld() {
         // Clear old-generated directory
         fs.readdirSync(oldGeneratedDir).forEach((file) => {
             const curPath = path.join(oldGeneratedDir, file);
-            if (fs.lstatSync(curPath).isFile()) {
-                fs.unlinkSync(curPath);
-            }
+            fs.rmSync(curPath, { recursive: true, force: true });
         });
     }
 
     // Move files from generated to old-generated
     if (fs.existsSync(generatedDir)) {
         fs.readdirSync(generatedDir).forEach((file) => {
+            if (file === 'uploads') return;
             const oldPath = path.join(generatedDir, file);
             const newPath = path.join(oldGeneratedDir, file);
-            if (file !== 'uploads' && fs.lstatSync(oldPath).isFile()) {
-                fs.renameSync(oldPath, newPath);
-            }
+            fs.rmSync(newPath, { recursive: true, force: true });
+            fs.renameSync(oldPath, newPath);
         });
     }
 }
@@ -364,20 +379,17 @@ function copyGeneratedToOld() {
         // Clear old-generated directory
         fs.readdirSync(oldGeneratedDir).forEach((file) => {
             const curPath = path.join(oldGeneratedDir, file);
-            if (fs.lstatSync(curPath).isFile()) {
-                fs.unlinkSync(curPath);
-            }
+            fs.rmSync(curPath, { recursive: true, force: true });
         });
     }
 
     // Copy files from generated to old-generated
     if (fs.existsSync(generatedDir)) {
         fs.readdirSync(generatedDir).forEach((file) => {
+            if (file === 'uploads') return;
             const sourcePath = path.join(generatedDir, file);
             const destPath = path.join(oldGeneratedDir, file);
-            if (file !== 'uploads' && fs.lstatSync(sourcePath).isFile()) {
-                fs.copyFileSync(sourcePath, destPath);
-            }
+            fs.cpSync(sourcePath, destPath, { recursive: true });
         });
     }
 }
@@ -464,14 +476,14 @@ Please fix all the errors while keeping the rest of the code intact. Provide the
     }
 
     // Process the AI response and return the fixed code
-    const fixedHtmlCode = extractCodeFromAIResponse(aiReply, 'html') || htmlContent;
-    const fixedCssCode = extractCodeFromAIResponse(aiReply, 'css') || cssContent;
-    const fixedJsCode = extractCodeFromAIResponse(aiReply, 'javascript') || jsContent;
+    const fixedHtmlCode = extractCodeSnippet(aiReply, 'html') || htmlContent;
+    const fixedCssCode = extractCodeSnippet(aiReply, 'css') || cssContent;
+    const fixedJsCode = extractCodeSnippet(aiReply, 'javascript') || jsContent;
 
     return { html: fixedHtmlCode, css: fixedCssCode, js: fixedJsCode };
 }
 
-async function generateAndSaveImage(prompt, filename, htmlFile) {
+async function generateAndSaveImage(prompt, filename, htmlFile, scriptMode = 'html-js-css') {
     try {
         const response = await axios.post(
             'https://api.openai.com/v1/images/generations',
@@ -496,8 +508,16 @@ async function generateAndSaveImage(prompt, filename, htmlFile) {
         // Generate a unique filename based on the HTML file and a timestamp
         const timestamp = Date.now();
         const uniqueFilename = `${htmlFile ? htmlFile.replace('.html', '') + '_' : ''}${filename.replace('.png', '')}_${timestamp}.png`;
-        
-        fs.writeFileSync(path.join(__dirname, 'generated', uniqueFilename), imageResponse.data);
+
+        const imagesDir = scriptMode === 'flask'
+            ? path.join(__dirname, 'generated', 'assets')
+            : path.join(__dirname, 'generated');
+
+        if (!fs.existsSync(imagesDir)) {
+            fs.mkdirSync(imagesDir, { recursive: true });
+        }
+
+        fs.writeFileSync(path.join(imagesDir, uniqueFilename), imageResponse.data);
 
         return uniqueFilename;
     } catch (error) {
@@ -512,7 +532,7 @@ async function generateAndSaveImage(prompt, filename, htmlFile) {
 }
 
 function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
-    let htmlCode, cssCode, jsCode, additionalHtmlCodes = [];
+    let htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes = [];
 
     const extractCode = (language) => {
         const regex = new RegExp(`\`\`\`\s*${language}\s*([\\s\\S]*?)\`\`\``, 'i');
@@ -556,6 +576,7 @@ function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
         htmlCode = htmlResults[0]?.code;
         cssCode = extractCode('css');
         jsCode = extractCode('javascript');
+        pythonCode = extractCode('python') || extractCode('py');
         if (htmlFileOption === 'multiple' && htmlResults.length > 1) {
             additionalHtmlCodes = htmlResults.slice(1).map((item, index) => ({
                 fileName: item.fileName || `page${index + 1}.html`,
@@ -564,10 +585,16 @@ function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
         }
     }
 
-    return { htmlCode, cssCode, jsCode, additionalHtmlCodes };
+    return { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes };
 }
 
-async function processCodeAndImages(code, fileType, htmlFile = '', index = '') {
+function extractCodeSnippet(text, language) {
+    const regex = new RegExp(`\`\`\`\s*${language}\s*([\\s\\S]*?)\`\`\``, 'i');
+    const match = text.match(regex);
+    return match ? match[1].trim() : null;
+}
+
+async function processCodeAndImages(code, fileType, htmlFile = '', index = '', scriptMode = 'html-js-css') {
     const imageRegex = /\[IMAGE:(.*?)\]/g;
     let updatedCode = code;
     let match;
@@ -579,7 +606,7 @@ async function processCodeAndImages(code, fileType, htmlFile = '', index = '') {
         const imageName = `image_${fileType}${index}_${imagePromises.length + 1}.png`;
         imagePromises.push(async () => {
             await delay(1000); // Add a 1-second delay between image generation requests
-            const uniqueImageName = await generateAndSaveImage(imageDescription, imageName, htmlFile || fileType);
+            const uniqueImageName = await generateAndSaveImage(imageDescription, imageName, htmlFile || fileType, scriptMode);
             imageReplacements.push({ original: imageName, unique: uniqueImageName });
             return uniqueImageName;
         });
@@ -587,13 +614,17 @@ async function processCodeAndImages(code, fileType, htmlFile = '', index = '') {
         let replacement;
         switch (fileType) {
             case 'html':
-                replacement = `<img src="${imageName}" alt="${imageDescription}" />`;
+                if (scriptMode === 'flask') {
+                    replacement = `<img src="/assets/${imageName}" alt="${imageDescription}" />`;
+                } else {
+                    replacement = `<img src="${imageName}" alt="${imageDescription}" />`;
+                }
                 break;
             case 'css':
-                replacement = `url('${imageName}')`;
+                replacement = scriptMode === 'flask' ? `url('/assets/${imageName}')` : `url('${imageName}')`;
                 break;
             case 'js':
-                replacement = `'${imageName}'`;
+                replacement = scriptMode === 'flask' ? `'/assets/${imageName}'` : `'${imageName}'`;
                 break;
         }
         
@@ -715,16 +746,30 @@ app.post('/generate-code', async (req, res) => {
         lastPrompt = prompt;
         lastResponse = aiReply;
         
-        const { htmlCode, cssCode, jsCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
+        const { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
         
         console.log(`htmlCode is of type '${typeof htmlCode}'`);
         console.log(`cssCode is of type '${typeof cssCode}'`);
         console.log(`jsCode is of type '${typeof jsCode}'`);
 
-        isCodeComplete = checkIfCodeComplete(htmlCode, cssCode, jsCode, additionalHtmlCodes, scriptMode);
+        isCodeComplete = checkIfCodeComplete(htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes, scriptMode);
 
         if (!fs.existsSync(generatedDir)) {
             fs.mkdirSync(generatedDir);
+        }
+
+        let templatesDir = generatedDir;
+        let staticDir = generatedDir;
+
+        if (scriptMode === 'flask') {
+            templatesDir = path.join(generatedDir, 'templates');
+            staticDir = path.join(generatedDir, 'static');
+            if (!fs.existsSync(templatesDir)) {
+                fs.mkdirSync(templatesDir, { recursive: true });
+            }
+            if (!fs.existsSync(staticDir)) {
+                fs.mkdirSync(staticDir, { recursive: true });
+            }
         }
 
         let files = [];
@@ -732,7 +777,7 @@ app.post('/generate-code', async (req, res) => {
 
         if (scriptMode === 'html-only') {
             if (typeof htmlCode === 'string') {
-                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html').then(processedHtmlCode => {
+                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html', '', scriptMode).then(processedHtmlCode => {
                     fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
                     files.push('index.html');
                 }));
@@ -743,7 +788,7 @@ app.post('/generate-code', async (req, res) => {
                     const htmlFileName = (codeObj && codeObj.fileName) ? codeObj.fileName : `page${index + 1}.html`;
                     const code = (codeObj && codeObj.code) ? codeObj.code : codeObj;
                     if (typeof code === 'string') {
-                        processPromises.push(processCodeAndImages(code, 'html', htmlFileName, index + 1).then(processedCode => {
+                        processPromises.push(processCodeAndImages(code, 'html', htmlFileName, index + 1, scriptMode).then(processedCode => {
                             fs.writeFileSync(path.join(generatedDir, htmlFileName), processedCode);
                             files.push(htmlFileName);
                         }));
@@ -752,23 +797,26 @@ app.post('/generate-code', async (req, res) => {
             }
         } else {
             if (typeof htmlCode === 'string') {
-                processPromises.push(processCodeAndImages(htmlCode, 'html').then(processedHtmlCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
-                    files.push('index.html');
+                processPromises.push(processCodeAndImages(htmlCode, 'html', '', '', scriptMode).then(processedHtmlCode => {
+                    const target = scriptMode === 'flask' ? templatesDir : generatedDir;
+                    fs.writeFileSync(path.join(target, 'index.html'), processedHtmlCode);
+                    files.push(scriptMode === 'flask' ? path.join('templates','index.html') : 'index.html');
                 }));
             }
 
             if (typeof cssCode === 'string') {
-                processPromises.push(processCodeAndImages(cssCode, 'css').then(processedCssCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'styles.css'), processedCssCode);
-                    files.push('styles.css');
+                processPromises.push(processCodeAndImages(cssCode, 'css', '', '', scriptMode).then(processedCssCode => {
+                    const target = scriptMode === 'flask' ? staticDir : generatedDir;
+                    fs.writeFileSync(path.join(target, 'styles.css'), processedCssCode);
+                    files.push(scriptMode === 'flask' ? path.join('static','styles.css') : 'styles.css');
                 }));
             }
 
             if (typeof jsCode === 'string') {
-                processPromises.push(processCodeAndImages(jsCode, 'js').then(processedJsCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'script.js'), processedJsCode);
-                    files.push('script.js');
+                processPromises.push(processCodeAndImages(jsCode, 'js', '', '', scriptMode).then(processedJsCode => {
+                    const target = scriptMode === 'flask' ? staticDir : generatedDir;
+                    fs.writeFileSync(path.join(target, 'script.js'), processedJsCode);
+                    files.push(scriptMode === 'flask' ? path.join('static','script.js') : 'script.js');
                 }));
             }
 
@@ -777,19 +825,25 @@ app.post('/generate-code', async (req, res) => {
                     const htmlFileName = (codeObj && codeObj.fileName) ? codeObj.fileName : `page${index + 1}.html`;
                     const code = (codeObj && codeObj.code) ? codeObj.code : codeObj;
                     if (typeof code === 'string') {
-                        processPromises.push(processCodeAndImages(code, 'html', htmlFileName).then(processedCode => {
-                            fs.writeFileSync(path.join(generatedDir, htmlFileName), processedCode);
-                            files.push(htmlFileName);
+                        processPromises.push(processCodeAndImages(code, 'html', htmlFileName, '', scriptMode).then(processedCode => {
+                            const target = scriptMode === 'flask' ? templatesDir : generatedDir;
+                            fs.writeFileSync(path.join(target, htmlFileName), processedCode);
+                            files.push(scriptMode === 'flask' ? path.join('templates', htmlFileName) : htmlFileName);
                         }));
                     }
                 });
+            }
+
+            if (scriptMode === 'flask' && typeof pythonCode === 'string') {
+                fs.writeFileSync(path.join(generatedDir, 'app.py'), pythonCode);
+                files.push('app.py');
             }
         }
 
         await Promise.all(processPromises);
         
         // Check for errors in the generated code
-        const errors = checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCodes);
+        const errors = checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, additionalHtmlCodes);
 
         if (errors.length > 0) {
             res.json({ message: 'Code generated with errors', files: files, errors: errors, isComplete: isCodeComplete });
@@ -821,13 +875,21 @@ Please complete the code generation, ensuring all necessary parts are included.`
         
         lastResponse += aiReply;
         
-        const { htmlCode, cssCode, jsCode, additionalHtmlCodes } = extractCodeFromAIResponse(lastResponse, scriptMode, htmlFileOption);
-        
-        isCodeComplete = checkIfCodeComplete(htmlCode, cssCode, jsCode, additionalHtmlCodes);
+        const { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes } = extractCodeFromAIResponse(lastResponse, scriptMode, htmlFileOption);
+
+        isCodeComplete = checkIfCodeComplete(htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes, scriptMode);
 
         const generatedDir = path.join(__dirname, 'generated');
         if (!fs.existsSync(generatedDir)) {
             fs.mkdirSync(generatedDir);
+        }
+        let templatesDir = generatedDir;
+        let staticDir = generatedDir;
+        if (scriptMode === 'flask') {
+            templatesDir = path.join(generatedDir, 'templates');
+            staticDir = path.join(generatedDir, 'static');
+            if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
+            if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
         }
 
         let files = [];
@@ -835,9 +897,9 @@ Please complete the code generation, ensuring all necessary parts are included.`
 
         if (scriptMode === 'html-only') {
             if (htmlCode) {
-                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html').then(processedHtmlCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
-                    files.push('index.html');
+                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html', '', scriptMode).then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(templatesDir, 'index.html'), processedHtmlCode);
+                    files.push(scriptMode === 'flask' ? path.join('templates','index.html') : 'index.html');
                 }));
             }
 
@@ -845,32 +907,32 @@ Please complete the code generation, ensuring all necessary parts are included.`
                 additionalHtmlCodes.forEach((codeObj, index) => {
                     if (codeObj && codeObj.code) {
                         const fileName = codeObj.fileName || `page${index + 1}.html`;
-                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName).then(processedCode => {
-                            fs.writeFileSync(path.join(generatedDir, fileName), processedCode);
-                            files.push(fileName);
+                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName, '', scriptMode).then(processedCode => {
+                            fs.writeFileSync(path.join(templatesDir, fileName), processedCode);
+                            files.push(scriptMode === 'flask' ? path.join('templates', fileName) : fileName);
                         }));
                     }
                 });
             }
         } else {
             if (htmlCode) {
-                processPromises.push(processCodeAndImages(htmlCode, 'html').then(processedHtmlCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
-                    files.push('index.html');
+                processPromises.push(processCodeAndImages(htmlCode, 'html', '', '', scriptMode).then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(templatesDir, 'index.html'), processedHtmlCode);
+                    files.push(scriptMode === 'flask' ? path.join('templates','index.html') : 'index.html');
                 }));
             }
 
             if (cssCode) {
-                processPromises.push(processCodeAndImages(cssCode, 'css').then(processedCssCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'styles.css'), processedCssCode);
-                    files.push('styles.css');
+                processPromises.push(processCodeAndImages(cssCode, 'css', '', '', scriptMode).then(processedCssCode => {
+                    fs.writeFileSync(path.join(staticDir, 'styles.css'), processedCssCode);
+                    files.push(scriptMode === 'flask' ? path.join('static','styles.css') : 'styles.css');
                 }));
             }
 
             if (jsCode) {
-                processPromises.push(processCodeAndImages(jsCode, 'js').then(processedJsCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'script.js'), processedJsCode);
-                    files.push('script.js');
+                processPromises.push(processCodeAndImages(jsCode, 'js', '', '', scriptMode).then(processedJsCode => {
+                    fs.writeFileSync(path.join(staticDir, 'script.js'), processedJsCode);
+                    files.push(scriptMode === 'flask' ? path.join('static','script.js') : 'script.js');
                 }));
             }
 
@@ -878,18 +940,23 @@ Please complete the code generation, ensuring all necessary parts are included.`
                 additionalHtmlCodes.forEach((codeObj, index) => {
                     if (codeObj && codeObj.code) {
                         const fileName = codeObj.fileName || `page${index + 1}.html`;
-                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName).then(processedCode => {
-                            fs.writeFileSync(path.join(generatedDir, fileName), processedCode);
-                            files.push(fileName);
+                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName, '', scriptMode).then(processedCode => {
+                            fs.writeFileSync(path.join(templatesDir, fileName), processedCode);
+                            files.push(scriptMode === 'flask' ? path.join('templates', fileName) : fileName);
                         }));
                     }
                 });
             }
+
+        if (scriptMode === 'flask' && typeof pythonCode === 'string') {
+            fs.writeFileSync(path.join(generatedDir, 'app.py'), pythonCode);
+            files.push('app.py');
+        }
         }
 
         await Promise.all(processPromises);
 
-        const errors = checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCodes);
+        const errors = checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, additionalHtmlCodes);
 
         if (errors.length > 0) {
             res.json({ message: 'Code continued with errors', files: files, errors: errors, isComplete: isCodeComplete });
@@ -905,23 +972,24 @@ Please complete the code generation, ensuring all necessary parts are included.`
 });
 
 // Add this function to check if the code is complete
-function checkIfCodeComplete(htmlCode, cssCode, jsCode, additionalHtmlCodes, scriptMode) {
+function checkIfCodeComplete(htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes, scriptMode) {
     if (scriptMode === 'html-only') {
         return typeof htmlCode === 'string' && htmlCode.trim() !== '';
-    } else {
-        const isHtmlComplete = typeof htmlCode === 'string' && htmlCode.trim() !== '';
-        const isCssComplete = typeof cssCode === 'string' && cssCode.trim() !== '';
-        const isJsComplete = typeof jsCode === 'string' && jsCode.trim() !== '';
-        const areAdditionalHtmlComplete = additionalHtmlCodes.every(item => {
-            const code = typeof item === 'string' ? item : item.code;
-            return typeof code === 'string' && code.trim() !== '';
-        });
-        
-        return isHtmlComplete && isCssComplete && isJsComplete && areAdditionalHtmlComplete;
     }
+
+    const isHtmlComplete = typeof htmlCode === 'string' && htmlCode.trim() !== '';
+    const isCssComplete = typeof cssCode === 'string' && cssCode.trim() !== '';
+    const isJsComplete = typeof jsCode === 'string' && jsCode.trim() !== '';
+    const isPythonComplete = scriptMode === 'flask' ? (typeof pythonCode === 'string' && pythonCode.trim() !== '') : true;
+    const areAdditionalHtmlComplete = additionalHtmlCodes.every(item => {
+        const code = typeof item === 'string' ? item : item.code;
+        return typeof code === 'string' && code.trim() !== '';
+    });
+
+    return isHtmlComplete && isCssComplete && isJsComplete && isPythonComplete && areAdditionalHtmlComplete;
 }
 
-function checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCodes) {
+function checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, additionalHtmlCodes) {
     const errors = [];
 
     // Check HTML (simplified, you might want to use a proper HTML validator)
@@ -949,7 +1017,7 @@ function checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCod
     }
 
     // Check JavaScript
-    if (scriptMode === 'html-js-css' && jsCode) {
+    if ((scriptMode === 'html-js-css' || scriptMode === 'flask') && jsCode) {
         jshint.JSHINT(jsCode, { esversion: 6 });
         if (jshint.JSHINT.errors.length > 0) {
             jshint.JSHINT.errors.forEach(error => {
@@ -958,6 +1026,10 @@ function checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCod
                 }
             });
         }
+    }
+
+    if (scriptMode === 'flask' && (!pythonCode || pythonCode.trim() === '')) {
+        errors.push('app.py code is empty or missing');
     }
 
     return errors;
@@ -981,7 +1053,7 @@ app.post('/fix-error', async (req, res) => {
         fs.writeFileSync(path.join(generatedDir, 'script.js'), fixedCode.js);
 
         // Check if all errors are fixed
-        const remainingErrors = checkForErrors(fixedCode.html, fixedCode.css, fixedCode.js);
+        const remainingErrors = checkForErrors(fixedCode.html, fixedCode.css, fixedCode.js, null, 'html-js-css', []);
 
         if (remainingErrors.length > 0) {
             res.json({ message: 'Some errors fixed, but issues remain', files: ['index.html', 'styles.css', 'script.js'], errors: remainingErrors });
@@ -1157,6 +1229,11 @@ ${scriptContent}
         } else {
             basePrompt += `multiple HTML files, styles.css, and script.js`;
         }
+    } else if (scriptMode === 'flask') {
+        basePrompt += ` Generate a Flask web application with an app.py file. All HTML templates must reside in a templates directory and reference CSS with the {% static %} convention using /static/. Place all CSS and JavaScript files inside a static directory. Image references should use /assets/`;
+        if (htmlFileOption === 'multiple') {
+            basePrompt += ` Generate multiple HTML template files (maximum ${htmlPageCount}) with a main index.html. Name additional pages page1.html, page2.html and so on.`;
+        }
     }
 
     basePrompt += `, wrapped in appropriate markdown code blocks (e.g., \`\`\`html, \`\`\`css, \`\`\`javascript).
@@ -1284,16 +1361,25 @@ app.post('/edit-code', async (req, res) => {
         const aiReply = await editCodeWithModel(prompt, model, htmlContent, cssContent, jsContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
         console.log("response: " + aiReply);
         
-        const { htmlCode, cssCode, jsCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
+        const { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
 
         let files = [];
         let processPromises = [];
 
+        let templatesDir = generatedDir;
+        let staticDir = generatedDir;
+        if (scriptMode === 'flask') {
+            templatesDir = path.join(generatedDir, 'templates');
+            staticDir = path.join(generatedDir, 'static');
+            if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
+            if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
+        }
+
         if (scriptMode === 'html-only') {
             if (htmlCode) {
-                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html').then(processedHtmlCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
-                    files.push('index.html');
+                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html', '', scriptMode).then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(templatesDir, 'index.html'), processedHtmlCode);
+                    files.push(scriptMode === 'flask' ? path.join('templates','index.html') : 'index.html');
                 }));
             }
 
@@ -1301,32 +1387,32 @@ app.post('/edit-code', async (req, res) => {
                 additionalHtmlCodes.forEach((codeObj, index) => {
                     if (codeObj && codeObj.code) {
                         const fileName = codeObj.fileName || `page${index + 1}.html`;
-                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName).then(processedCode => {
-                            fs.writeFileSync(path.join(generatedDir, fileName), processedCode);
-                            files.push(fileName);
+                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName, '', scriptMode).then(processedCode => {
+                            fs.writeFileSync(path.join(templatesDir, fileName), processedCode);
+                            files.push(scriptMode === 'flask' ? path.join('templates', fileName) : fileName);
                         }));
                     }
                 });
             }
         } else {
             if (htmlCode) {
-                processPromises.push(processCodeAndImages(htmlCode, 'html').then(processedHtmlCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'index.html'), processedHtmlCode);
-                    files.push('index.html');
+                processPromises.push(processCodeAndImages(htmlCode, 'html', '', '', scriptMode).then(processedHtmlCode => {
+                    fs.writeFileSync(path.join(templatesDir, 'index.html'), processedHtmlCode);
+                    files.push(scriptMode === 'flask' ? path.join('templates','index.html') : 'index.html');
                 }));
             }
 
             if (cssCode) {
-                processPromises.push(processCodeAndImages(cssCode, 'css').then(processedCssCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'styles.css'), processedCssCode);
-                    files.push('styles.css');
+                processPromises.push(processCodeAndImages(cssCode, 'css', '', '', scriptMode).then(processedCssCode => {
+                    fs.writeFileSync(path.join(staticDir, 'styles.css'), processedCssCode);
+                    files.push(scriptMode === 'flask' ? path.join('static','styles.css') : 'styles.css');
                 }));
             }
 
             if (scriptMode === 'html-js-css' && jsCode) {
-                processPromises.push(processCodeAndImages(jsCode, 'js').then(processedJsCode => {
-                    fs.writeFileSync(path.join(generatedDir, 'script.js'), processedJsCode);
-                    files.push('script.js');
+                processPromises.push(processCodeAndImages(jsCode, 'js', '', '', scriptMode).then(processedJsCode => {
+                    fs.writeFileSync(path.join(staticDir, 'script.js'), processedJsCode);
+                    files.push(scriptMode === 'flask' ? path.join('static','script.js') : 'script.js');
                 }));
             }
 
@@ -1334,17 +1420,22 @@ app.post('/edit-code', async (req, res) => {
                 additionalHtmlCodes.forEach((codeObj, index) => {
                     if (codeObj && codeObj.code) {
                         const fileName = codeObj.fileName || `page${index + 1}.html`;
-                        processPromises.push(processCodeAndImages(codeObj.code, 'html').then(processedCode => {
-                            fs.writeFileSync(path.join(generatedDir, fileName), processedCode);
-                            files.push(fileName);
+                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName, '', scriptMode).then(processedCode => {
+                            fs.writeFileSync(path.join(templatesDir, fileName), processedCode);
+                            files.push(scriptMode === 'flask' ? path.join('templates', fileName) : fileName);
                         }));
                     }
                 });
             }
+
+        if (scriptMode === 'flask' && typeof pythonCode === 'string') {
+            fs.writeFileSync(path.join(generatedDir, 'app.py'), pythonCode);
+            files.push('app.py');
+        }
         }
 
         await Promise.all(processPromises);
-        const errors = checkForErrors(htmlCode, cssCode, jsCode, scriptMode, additionalHtmlCodes);
+        const errors = checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, additionalHtmlCodes);
 
         if (errors.length > 0) {
             res.json({ message: 'Code updated with errors', files: files, errors: errors });
