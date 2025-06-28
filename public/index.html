@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #chat-container {
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #user-input {
+            width: 60%;
+            padding: 5px;
+        }
+        #send-button, #upload-button, #generate-button, #generate-code-btn, #edit-code-btn {
+            padding: 5px 10px;
+        }
+        #image-preview {
+            max-width: 200px;
+            max-height: 200px;
+            margin-top: 10px;
+        }
+        #file-upload-container {
+            margin-top: 10px;
+        }
+        
+        #uploaded-files-list {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            min-height: 50px;
+        }
+        #error-section {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #ff0000;
+            background-color: #ffeeee;
+            display: none;
+        }
+        #error-message {
+            color: #ff0000;
+            font-weight: bold;
+        }
+        img {
+            max-width: 200px;
+            max-height: 200px;
+            margin-top: 10px;
+        }
+        .model-select {
+            margin-bottom: 10px;
+        }
+        .model-select select {
+            padding: 5px;
+            font-size: 14px;
+        }
+        .script-mode-select {
+            margin-bottom: 10px;
+        }
+        .script-mode-select select {
+            padding: 5px;
+            font-size: 14px;
+        }
+        .web-content-container {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+            overflow: auto;
+        }
+        .web-content-display {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        #show-web-content-btn {
+            margin-top: 10px;
+        }
+        .image-option-select {
+            margin-bottom: 10px;
+        }
+        .image-option-select select {
+            padding: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Chatbot</h1>
+    <div id="chat-container"></div>
+    <input type="text" id="user-input" placeholder="Type your message...">
+    <button id="send-button">Send</button>
+    <input type="file" id="image-upload" accept="image/*" style="display: none;">
+    <button id="upload-button">Upload Image</button>
+    <img id="image-preview" style="display: none;">
+    <div class="model-select">
+        <label for="generate-code-model">Select Model for Generate Code:</label>
+        <select id="generate-code-model">
+            <option value="claude-3.5">Claude 3.5</option>
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="llama3">Llama 3</option>
+        </select>
+    </div>
+    <button onclick="generateCode()">Generate Code</button>
+
+    <!-- New model selection dropdown for Edit Code -->
+    <div class="model-select">
+        <label for="edit-code-model">Select Model for Edit Code:</label>
+        <select id="edit-code-model">
+            <option value="claude-3.5">Claude 3.5</option>
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="llama3">Llama 3</option>
+        </select>
+    </div>
+    <button id="generate-button">Generate Image</button>
+    <button id="generate-code-btn" onclick="generateCode()">Generate Code</button>
+    <button id="edit-code-btn" onclick="editCode()">Edit Code</button>
+    <button id="show-web-content-btn" onclick="showWebContent()">Show Web Content</button>
+    <button id="continue-code-btn" style="display: none;" onclick="continueCodeGeneration()">Continue Code Generation</button>
+    <div id="file-upload-container">
+        <input type="file" id="code-file-upload" multiple>
+        <button onclick="uploadForCode()">Upload for Code</button>
+        <div id="uploaded-files-list"></div>
+    </div>
+    <div class="image-option-select">
+        <label for="image-option">Image Option:</label>
+        <select id="image-option">
+            <option value="default">Default</option>
+            <option value="include">Include Images</option>
+            <option value="exclude">Exclude Images</option>
+        </select>
+    </div>
+    <div class="script-mode-select">
+        <label for="script-mode">Select Script Mode:</label>
+        <select id="script-mode">
+            <option value="html-js-css">HTML, JS, CSS</option>
+            <option value="html-only">HTML Only</option>
+        </select>
+    <div class="image-option-select">
+        <label for="edit-image-option">Image Option for Edit:</label>
+        <select id="edit-image-option">
+            <option value="default">Default</option>
+            <option value="include">Include Images</option>
+            <option value="exclude">Exclude Images</option>
+        </select>
+    </div>
+    <div class="html-file-option-select">
+        <label for="html-file-option">HTML File Option:</label>
+        <select id="html-file-option">
+            <option value="single">Single HTML</option>
+            <option value="multiple">Multiple HTML (Max 3)</option>
+        </select>
+    </div>
+    <div class="html-file-option-select"></div>
+        <label for="edit-html-file-option">HTML File Option for Edit:</label>
+        <select id="edit-html-file-option">
+            <option value="single">Single HTML</option>
+            <option value="multiple">Multiple HTML (Max 3)</option>
+        </select>
+    </div>
+    <div id="error-section">
+        <p id="error-message"></p>
+        <button id="fix-error-btn" onclick="fixError()">Fix Error</button>
+    </div>
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const uploadButton = document.getElementById('upload-button');
+        const imageUpload = document.getElementById('image-upload');
+        const imagePreview = document.getElementById('image-preview');
+        const generateButton = document.getElementById('generate-button');
+
+        let currentImage = null;
+
+        function logError(message, source, lineno, colno) {
+            console.error(`Error: ${message} at ${source}:${lineno}:${colno}`);
+            showError(`Error: ${message} at line ${lineno}, column ${colno}`);
+        }
+
+        // Override console.error
+        const originalConsoleError = console.error;
+        console.error = function() {
+            logError(arguments[0], '', 0, 0);
+            originalConsoleError.apply(console, arguments);
+        };
+
+        // Global error handler
+        window.onerror = function(message, source, lineno, colno, error) {
+            logError(message, source, lineno, colno);
+            return true;
+        };
+
+        function addMessage(sender, message, isImage = false) {
+            const messageElement = document.createElement('p');
+            if (isImage) {
+                messageElement.innerHTML = `<strong>${sender}:</strong> <img src="${message}" style="max-width: 200px; max-height: 200px;">`;
+            } else {
+                messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+            }
+            chatContainer.appendChild(messageElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addImage(imageUrl) {
+            const imageElement = document.createElement('img');
+            imageElement.src = imageUrl;
+            chatContainer.appendChild(imageElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function showError(message) {
+            const errorSection = document.getElementById('error-section');
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.textContent = message;
+            errorSection.style.display = 'block';
+        }
+
+        function hideError() {
+            const errorSection = document.getElementById('error-section');
+            errorSection.style.display = 'none';
+        }
+
+        async function showWebContent() {
+            try {
+                const container = document.createElement('div');
+                container.className = 'web-content-container';
+                
+                const iframe = document.createElement('iframe');
+                iframe.className = 'web-content-display';
+                iframe.src = '/generated/index.html';
+                
+                container.appendChild(iframe);
+
+                addMessage('System', 'Generated Web Content:');
+                chatContainer.lastElementChild.appendChild(container);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                // Adjust iframe height after content loads
+                iframe.onload = function() {
+                    adjustIframeHeight(iframe);
+                };
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('System', 'An error occurred while displaying the web content.');
+            }
+        }
+
+        function adjustIframeHeight(iframe) {
+            try {
+                const height = iframe.contentWindow.document.body.scrollHeight;
+                iframe.style.height = height + 'px';
+            } catch (e) {
+                console.error('Error adjusting iframe height:', e);
+            }
+        }
+        async function fixError() {
+            const errorMessage = document.getElementById('error-message').textContent;
+            const model = document.getElementById('generate-code-model').value;
+
+            try {
+                const response = await fetch('/fix-error', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ errors: [errorMessage], model }),
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    if (data.errors && data.errors.length > 0) {
+                        showError(`Some errors fixed, but issues remain: ${data.errors.join(', ')}`);
+                    } else {
+                        hideError();
+                        addMessage('AI', `All errors fixed successfully. Files: ${data.files.join(', ')}`);
+                        location.reload(); // Reload the page to apply fixed code
+                    }
+                } else {
+                    throw new Error(data.error || 'Failed to fix error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('An error occurred while fixing the code.');
+            }
+        }
+
+        function loadGeneratedScripts() {
+            const scriptMode = document.getElementById('script-mode').value;
+            if (scriptMode === 'html-js-css') {
+                fetch('/generated/script.js')
+                    .then(response => response.text())
+                    .then(scriptContent => {
+                        try {
+                            eval(scriptContent);
+                        } catch (error) {
+                            logError(error.message, 'script.js', error.lineNumber, error.columnNumber);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading script:', error);
+                    });
+            }
+        }
+
+        function afterCodeGeneration() {
+            loadGeneratedScripts();
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (message) {
+                addMessage('You', message);
+                userInput.value = '';
+
+                const formData = new FormData();
+                formData.append('message', message);
+                if (currentImage) {
+                    formData.append('image', currentImage);
+                }
+
+                try {
+                    const response = await fetch('/chat', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        addMessage('AI', data.reply);
+                    } else {
+                        const errorData = await response.json();
+                        addMessage('System', `Error: ${errorData.error || 'Unable to get a response from the AI.'}`);
+                    }
+                } catch (error) {
+                    addMessage('System', 'Error: Unable to connect to the server.');
+                }
+
+                // Clear the current image after sending
+                currentImage = null;
+                imagePreview.style.display = 'none';
+            }
+        }
+
+        uploadButton.addEventListener('click', () => {
+            imageUpload.click();
+        });
+
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                currentImage = file;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                    addMessage('You', e.target.result, true);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        async function generateImage() {
+            const prompt = userInput.value.trim();
+            console.log(prompt)
+            if (prompt) {
+                addMessage('You', prompt);
+                userInput.value = '';
+
+                try {
+                    const response = await fetch('/generate-image', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ prompt }),
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        addImage(data.url);
+                    } else {
+                        const errorData = await response.json();
+                        addMessage('System', `Error: ${errorData.error || 'Unable to generate the image.'}`);
+                    }
+                } catch (error) {
+                    addMessage('System', 'Error: Unable to connect to the server.');
+                    console.log(error)
+                }
+            }
+        }
+
+
+        async function generateCode() {
+            const userInput = document.getElementById('user-input').value;
+            const model = document.getElementById('generate-code-model').value;
+            const imageOption = document.getElementById('image-option').value;
+            const htmlFileOption = document.getElementById('html-file-option').value;
+            const scriptMode = document.getElementById('script-mode').value;
+            if (!userInput) {
+                alert('Please enter a prompt for code generation.');
+                return;
+            }
+
+            try {
+        const response = await fetch('/generate-code', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ prompt: userInput, model, scriptMode, imageOption, htmlFileOption }),
+        });
+        const data = await response.json();
+        if (response.ok) {
+            hideError();
+            addMessage('You', userInput);
+            addMessage('AI', `Code generated. Files created: ${data.files.join(', ')}`);
+            if (data.errors && data.errors.length > 0) {
+                showError(`Errors found in generated code: ${data.errors.join(', ')}`);
+            } else {
+                afterCodeGeneration();
+            }
+            
+            // Show or hide the continue button based on code completeness
+            document.getElementById('continue-code-btn').style.display = data.isComplete ? 'none' : 'inline-block';
+        } else {
+            addMessage('System', `Failed to generate code: ${data.message}`);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        addMessage('System', 'An error occurred while generating code.');
+    }
+
+    document.getElementById('user-input').value = '';
+}
+
+async function continueCodeGeneration() {
+    const model = document.getElementById('generate-code-model').value;
+    const imageOption = document.getElementById('image-option').value;
+    const htmlFileOption = document.getElementById('html-file-option').value;
+    const scriptMode = document.getElementById('script-mode').value;
+
+    try {
+        const response = await fetch('/continue-code', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ model, scriptMode, imageOption, htmlFileOption }),
+        });
+        const data = await response.json();
+        if (response.ok) {
+            hideError();
+            addMessage('AI', 'Continuing code generation...');
+            if (data.isComplete) {
+                addMessage('AI', 'Code generation completed successfully.');
+                document.getElementById('continue-code-btn').style.display = 'none';
+                afterCodeGeneration();
+            } else {
+                addMessage('AI', 'Code generation continued but is still incomplete. You can press "Continue" again.');
+            }
+        } else {
+            addMessage('System', `Failed to continue code generation: ${data.message}`);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        addMessage('System', 'An error occurred while continuing code generation.');
+    }
+}
+
+        function uploadForCode() {
+            const fileInput = document.getElementById('code-file-upload');
+            const files = fileInput.files;
+            const formData = new FormData();
+            
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+            
+            fetch('/upload-for-code', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                const filesList = document.getElementById('uploaded-files-list');
+                filesList.innerHTML = 'Uploaded files: ' + data.files.join(', ');
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        async function editCode() {
+            const userInput = document.getElementById('user-input').value;
+            const model = document.getElementById('edit-code-model').value;
+            const imageOption = document.getElementById('edit-image-option').value;
+            const htmlFileOption = document.getElementById('edit-html-file-option').value;
+            const scriptMode = document.getElementById('script-mode').value;
+            if (!userInput) {
+                alert('Please enter a prompt for code editing.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/edit-code', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt: userInput, model, scriptMode, imageOption, htmlFileOption }),
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    hideError();
+                    addMessage('You', userInput);
+                    addMessage('AI', `Code updated successfully. Files modified: ${data.files.join(', ')}`);
+                    afterCodeGeneration();
+                } else {
+                    throw new Error(data.error || 'Failed to edit code');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('An error occurred while editing the code.');
+            }
+
+            document.getElementById('user-input').value = '';
+        }
+        
+        sendButton.addEventListener('click', sendMessage);
+        generateButton.addEventListener('click', generateImage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        loadGeneratedScripts();
+    </script>
+</body>
+</html>
