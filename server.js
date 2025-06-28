@@ -183,7 +183,7 @@ function readCodeFiles(files) {
 }
 
 
-function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount) {
     console.log("image option: " + imageOption)
     let basePrompt = `you are the Gamecore, an advanced AI model designed to generate a detailed, immersive, interactive web content based on the following prompt: "${prompt}". your task is to interpret this prompt, making your best effort to understand their intention, even if the instructions are unclear or ambiguous.
     Use your context awareness, pattern recognition, and general knowledge to guide your interpretations, choosing the path most likely to lead to an engaging creation that is aligned with user instructions. respond with rich, immersive code that breathes life into the user's concepts, building upon their ideas to create captivating, immersive websites, apps, and games.`;
@@ -198,15 +198,19 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
 
     if (scriptMode === 'html-js-css') {
         if (htmlFileOption === 'single') {
-        basePrompt += ` Focus on generating incredible HTML, CSS, and JavaScript scripts. leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset.`;
-        }else{
-        basePrompt += ` Focus on generating multiple incredible HTML scripts (maximum 3), alongside other single CSS, and JavaScript scripts. All the html, js and css scripts should be connected with the css script providing the design for all the pages and the js providing the functionality for them all. There should be a main index.html file and all the other html files should be named page1.html, page2.html or page3.html and should be refrenced by this name in the code. For example, the menu page should not be called menu.html but page1.html but have the menu in the code itself. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset. Ensure all other html scripts are accesable from the main html script`;
+            basePrompt += ` Focus on generating incredible HTML, CSS, and JavaScript scripts. leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset.`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += ` Focus on generating multiple incredible HTML scripts (maximum ${htmlPageCount}), alongside other single CSS, and JavaScript scripts. All the html, js and css scripts should be connected with the css script providing the design for all the pages and the js providing the functionality for them all. There should be a main index.html file and all the other html files should be named page1.html, page2.html and so on and should be refrenced by this name in the code. For example, the menu page should not be called menu.html but page1.html but have the menu in the code itself. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset. Ensure all other html scripts are accesable from the main html script`;
+        } else {
+            basePrompt += ` Focus on generating multiple incredible HTML scripts as needed, alongside other single CSS and JavaScript scripts. There should be a main index.html file and additional html files should be named page1.html, page2.html and so on and referenced by this name in the code. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset. Ensure all other html scripts are accesable from the main html script`;
         }
     } else if (scriptMode === 'html-only') {
         if (htmlFileOption === 'single') {
-        basePrompt += ` Create a single HTML file that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag). Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset`;
-        }else{
-        basePrompt += ` Create multiple HTML files (maximum 3) that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag) in one file. There should be a main index.html file and all the other html files should be named page1.html, page2.html or page3.html and should be refrenced by this name in the code. For example, the menu page should not be called menu.html but page1.html but have the menu in the code itself. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset`;
+            basePrompt += ` Create a single HTML file that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag). Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += ` Create multiple HTML files (maximum ${htmlPageCount}) that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag) in one file. There should be a main index.html file and all the other html files should be named page1.html, page2.html and so on and should be refrenced by this name in the code. For example, the menu page should not be called menu.html but page1.html but have the menu in the code itself. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset`;
+        } else {
+            basePrompt += ` Create multiple HTML files as needed that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag) in one file. There should be a main index.html file and all the other html files should be named page1.html, page2.html and so on and should be refrenced by this name in the code. For example, the menu page should not be called menu.html but page1.html but have the menu in the code itself. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset`;
         }
     }
 
@@ -227,22 +231,26 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
 
     if (scriptMode === 'html-js-css') {
         if (htmlFileOption === 'single') {
-        basePrompt += `\n\nProvide the code for index.html, styles.css, and script.js`;
-        }else {
-        basePrompt += `\n\nProvide the code for multiple HTML files (maximum 3) along with separate CSS and JavaScript files being styles.css and script.js. Ensure all HTML files are accessible from the main HTML file.`;
+            basePrompt += `\n\nProvide the code for index.html, styles.css, and script.js`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += `\n\nProvide the code for multiple HTML files (maximum ${htmlPageCount}) along with separate CSS and JavaScript files being styles.css and script.js. Ensure all HTML files are accessible from the main HTML file.`;
+        } else {
+            basePrompt += `\n\nProvide the code for multiple HTML files along with separate CSS and JavaScript files being styles.css and script.js. Ensure all HTML files are accessible from the main HTML file.`;
         }
     } else if (scriptMode === 'html-only') {
         if (htmlFileOption === 'single') {
-        basePrompt += `\n\nProvide the code for a single index.html file that includes all HTML, CSS, and JavaScript within it`;
-        }else {
-        basePrompt += `\n\nProvide the code for multiple HTML files (maximum 3) that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
+            basePrompt += `\n\nProvide the code for a single index.html file that includes all HTML, CSS, and JavaScript within it`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += `\n\nProvide the code for multiple HTML files (maximum ${htmlPageCount}) that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
+        } else {
+            basePrompt += `\n\nProvide the code for multiple HTML files that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
         }
     }
 
     return basePrompt;
 }
 
-function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount) {
     let basePrompt = `Generate code for an interactive web content based on this prompt: "${prompt}". Create engaging and visually appealing code that fulfills the user's request. Focus on producing functional and creative code.`;
 
     if (imageOption === 'include') {
@@ -256,14 +264,18 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
     if (scriptMode === 'html-js-css') {
         if (htmlFileOption === 'single') {
             basePrompt += ` Generate a single HTML file along with separate CSS and JavaScript files.`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += ` Generate multiple HTML files (maximum ${htmlPageCount}) along with separate CSS and JavaScript files. Ensure all HTML files are accessible from the main HTML file.`;
         } else {
-            basePrompt += ` Generate multiple HTML files (maximum 3) along with separate CSS and JavaScript files. Ensure all HTML files are accessible from the main HTML file.`;
+            basePrompt += ` Generate multiple HTML files as needed along with separate CSS and JavaScript files. Ensure all HTML files are accessible from the main HTML file.`;
         }
     } else if (scriptMode === 'html-only') {
         if (htmlFileOption === 'single') {
             basePrompt += ` Create a single HTML file that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag).`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += ` Create multiple HTML files (maximum ${htmlPageCount}) that includes all CSS and JavaScript in it. Ensure all HTML files are named page1.html page2.html and so on and are all accesable and refrenced by its name in index.html.`;
         } else {
-            basePrompt += ` Create multiple HTML files (maximum 3) that includes all CSS and JavaScript in it. Ensure all HTML files are named page1.html page2.html and so on and are all accesable and refrenced by its name in index.html.`;
+            basePrompt += ` Create multiple HTML files that includes all CSS and JavaScript in it. Ensure all HTML files are named page1.html page2.html and so on and are all accesable and refrenced by its name in index.html.`;
         }
     }
 
@@ -280,15 +292,19 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
 
     if (scriptMode === 'html-js-css') {
         if (htmlFileOption === 'single') {
-        basePrompt += `\n\nProvide the code for index.html, styles.css, and script.js`;
-        }else {
-        basePrompt += `\n\nProvide the code for multiple HTML files (maximum 3) along with separate CSS and JavaScript files being styles.css and script.js. Ensure all HTML files are accessible from the main HTML file.`;
+            basePrompt += `\n\nProvide the code for index.html, styles.css, and script.js`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += `\n\nProvide the code for multiple HTML files (maximum ${htmlPageCount}) along with separate CSS and JavaScript files being styles.css and script.js. Ensure all HTML files are accessible from the main HTML file.`;
+        } else {
+            basePrompt += `\n\nProvide the code for multiple HTML files along with separate CSS and JavaScript files being styles.css and script.js. Ensure all HTML files are accessible from the main HTML file.`;
         }
     } else if (scriptMode === 'html-only') {
         if (htmlFileOption === 'single') {
-        basePrompt += `\n\nProvide the code for a single index.html file that includes all HTML, CSS, and JavaScript within it`;
-        }else {
-            basePrompt += `\n\nProvide the code for multiple HTML files (maximum 3) that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
+            basePrompt += `\n\nProvide the code for a single index.html file that includes all HTML, CSS, and JavaScript within it`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += `\n\nProvide the code for multiple HTML files (maximum ${htmlPageCount}) that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
+        } else {
+            basePrompt += `\n\nProvide the code for multiple HTML files that includs all CSS and JavaScript in it. Ensure all HTML files are accessible from the main HTML file, index.html.`;
         }
     }
 
@@ -608,12 +624,12 @@ app.post('/upload-for-code', upload.array('files'), (req, res) => {
     }
 });
 
-async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount) {
     let finalPrompt;
     if (model === 'llama3') {
-        finalPrompt = generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+        finalPrompt = generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
     } else {
-        finalPrompt = generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+        finalPrompt = generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
     }
     console.log(finalPrompt)
     if (model === 'claude-3.5') {
@@ -688,10 +704,11 @@ app.post('/generate-code', async (req, res) => {
         const scriptMode = req.body.scriptMode;
         const imageOption = req.body.imageOption;
         const htmlFileOption = req.body.htmlFileOption;
+        const htmlPageCount = req.body.htmlPageCount;
         const uploadedFiles = fs.readdirSync(path.join(__dirname, 'generated', 'uploads'));
         const codeContents = readCodeFiles(uploadedFiles);
 
-        const aiReply = await generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+        const aiReply = await generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
         console.log("response: " + aiReply);
         console.log("type is : " + typeof aiReply);
 
@@ -788,7 +805,7 @@ app.post('/generate-code', async (req, res) => {
 
 app.post('/continue-code', async (req, res) => {
     try {
-        const { model, scriptMode, imageOption, htmlFileOption } = req.body;
+        const { model, scriptMode, imageOption, htmlFileOption, htmlPageCount } = req.body;
         
         const continuePrompt = `Please continue the code generation based on the following prompt and previous response:
 
@@ -799,7 +816,7 @@ ${lastResponse}
 
 Please complete the code generation, ensuring all necessary parts are included.`;
 
-        const aiReply = await generateCodeWithModel(continuePrompt, model, [], {}, scriptMode, imageOption, htmlFileOption);
+        const aiReply = await generateCodeWithModel(continuePrompt, model, [], {}, scriptMode, imageOption, htmlFileOption, htmlPageCount);
         
         
         lastResponse += aiReply;
@@ -977,7 +994,7 @@ app.post('/fix-error', async (req, res) => {
     }
 });
 
-function generateEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+function generateEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount) {
     let basePrompt = `Here is the current code for a website:
 
 Main HTML:
@@ -1019,7 +1036,9 @@ if (imageOption === 'include') {
 }
 
 if (htmlFileOption === 'multiple') {
-    basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. You can create up to 3 HTML files in total.`;
+    basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. You can create up to ${htmlPageCount} HTML files in total.`;
+} else if (htmlFileOption === 'multiple-ai') {
+    basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. Generate as many HTML files as necessary.`;
 }
 
     if (uploadedFiles.length > 0) {
@@ -1044,13 +1063,15 @@ if (htmlFileOption === 'multiple') {
     } else if (scriptMode === 'html-js-css') {
         if (htmlFileOption === 'single') {
             basePrompt += `index.html, styles.css, and script.js`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += `multiple HTML files (maximum ${htmlPageCount}), styles.css, and script.js`;
         } else {
-            basePrompt += `multiple HTML files (maximum 3), styles.css, and script.js`;
+            basePrompt += `multiple HTML files, styles.css, and script.js`;
         }
     }
 
     basePrompt += `. Make sure to wrap each code section in appropriate markdown code blocks (e.g., \`\`\`html, \`\`\`css, \`\`\`javascript). `
-    if(htmlFileOption === 'multiple'){
+    if(htmlFileOption !== 'single'){
         basePrompt += `For HTML files, include the filename as a comment at the start of the code block, like this:
 \`\`\`html
 // index.html
@@ -1072,7 +1093,7 @@ basePrompt += `DO NOT MODIFY ANY PRE-EXISTING CODE, FEATURES, OR UI IN ANY OF TH
     return basePrompt;
 }
 
-function generateLlamaEditPrompt(prompt, htmlContent, cssContent, scriptContent, uploadedFiles, codeContents, scriptMode) {
+function generateLlamaEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount) {
     let basePrompt = `Edit the following code based on this prompt: "${prompt}".
 Make necessary changes while preserving existing functionality unless explicitly asked to remove it.
 Provide the full, updated code for each file.
@@ -1131,8 +1152,10 @@ ${scriptContent}
     } else if (scriptMode === 'html-js-css') {
         if (htmlFileOption === 'single') {
             basePrompt += `index.html, styles.css, and script.js`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += `multiple HTML files (maximum ${htmlPageCount}), styles.css, and script.js`;
         } else {
-            basePrompt += `multiple HTML files (maximum 3), styles.css, and script.js`;
+            basePrompt += `multiple HTML files, styles.css, and script.js`;
         }
     }
 
@@ -1143,12 +1166,12 @@ DO NOT MODIFY ANY PRE-EXISTING CODE, FEATURES, OR UI UNLESS SPECIFICALLY ASKED T
 }
 
 
-async function editCodeWithModel(prompt, model, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption) {
+async function editCodeWithModel(prompt, model, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount) {
     let finalPrompt;
     if (model === 'llama3') {
-        finalPrompt = generateLlamaEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+        finalPrompt = generateLlamaEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
     } else {
-        finalPrompt = generateEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+        finalPrompt = generateEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
     }
     console.log(finalPrompt)
 
@@ -1258,7 +1281,7 @@ app.post('/edit-code', async (req, res) => {
         const uploadedFiles = fs.readdirSync(path.join(generatedDir, 'uploads'));
         const codeContents = readCodeFiles(uploadedFiles);
 
-        const aiReply = await editCodeWithModel(prompt, model, htmlContent, cssContent, jsContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption);
+        const aiReply = await editCodeWithModel(prompt, model, htmlContent, cssContent, jsContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
         console.log("response: " + aiReply);
         
         const { htmlCode, cssCode, jsCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
