@@ -300,7 +300,7 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
             basePrompt += ` Create multiple HTML files that includes all CSS and JavaScript in it. Ensure all HTML files are named page1.html page2.html and so on and are all accesable and refrenced by its name in index.html.`;
         }
     } else if (scriptMode === 'flask') {
-        basePrompt += ` Generate a Flask application with app.py as the backend. Templates must be inside a templates directory and use /static/ paths via the {% static %} convention for CSS. Place all CSS and JavaScript in a static directory and reference images from /assets/.`;
+        basePrompt += ` Generate a Flask application with app.py as the backend. Templates must be inside a templates directory and use /static/ paths via the {% static %} convention for CSS. Place all CSS and JavaScript in a static directory and reference images from /assets/. Use the placeholder [FLASK_KEY] unquoted where the Flask secret key should go. Ensure all templates referenced in your code, such as layout.html, are included.`;
         if (htmlFileOption === 'multiple') {
             basePrompt += ` Generate multiple HTML template files (maximum ${htmlPageCount}) with a main index.html.`;
         }
@@ -610,6 +610,19 @@ function extractCodeSnippet(text, language) {
     return match ? match[1].trim() : null;
 }
 
+function generateFlaskSecretKey() {
+    return require('crypto').randomBytes(16).toString('hex');
+}
+
+function insertFlaskSecretKey(code) {
+    const placeholder = '[FLASK_KEY]';
+    if (code.includes(placeholder)) {
+        const key = generateFlaskSecretKey();
+        return code.replace(new RegExp('\\[FLASK_KEY\\]', 'g'), `'${key}'`);
+    }
+    return code;
+}
+
 async function processCodeAndImages(code, fileType, htmlFile = '', index = '', scriptMode = 'html-js-css') {
     const imageRegex = /\[IMAGE:(.*?)\]/g;
     let updatedCode = code;
@@ -640,6 +653,9 @@ async function processCodeAndImages(code, fileType, htmlFile = '', index = '', s
                 replacement = scriptMode === 'flask' ? `url('/assets/${imageName}')` : `url('${imageName}')`;
                 break;
             case 'js':
+                replacement = scriptMode === 'flask' ? `'/assets/${imageName}'` : `'${imageName}'`;
+                break;
+            case 'py':
                 replacement = scriptMode === 'flask' ? `'/assets/${imageName}'` : `'${imageName}'`;
                 break;
         }
@@ -851,8 +867,11 @@ app.post('/generate-code', async (req, res) => {
             }
 
             if (scriptMode === 'flask' && typeof pythonCode === 'string') {
-                fs.writeFileSync(path.join(generatedDir, 'app.py'), pythonCode);
-                files.push('app.py');
+                processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
+                    processedPy = insertFlaskSecretKey(processedPy);
+                    fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
+                    files.push('app.py');
+                }));
             }
         }
 
@@ -965,8 +984,11 @@ Please complete the code generation, ensuring all necessary parts are included.`
             }
 
         if (scriptMode === 'flask' && typeof pythonCode === 'string') {
-            fs.writeFileSync(path.join(generatedDir, 'app.py'), pythonCode);
-            files.push('app.py');
+            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
+                processedPy = insertFlaskSecretKey(processedPy);
+                fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
+                files.push('app.py');
+            }));
         }
         }
 
@@ -1246,7 +1268,7 @@ ${scriptContent}
             basePrompt += `multiple HTML files, styles.css, and script.js`;
         }
     } else if (scriptMode === 'flask') {
-        basePrompt += ` Generate a Flask web application with an app.py file. All HTML templates must reside in a templates directory and reference CSS with the {% static %} convention using /static/. Place all CSS and JavaScript files inside a static directory. Image references should use /assets/`;
+        basePrompt += ` Generate a Flask web application with an app.py file. All HTML templates must reside in a templates directory and reference CSS with the {% static %} convention using /static/. Place all CSS and JavaScript files inside a static directory. Image references should use /assets/. Use the placeholder [FLASK_KEY] unquoted where the Flask secret key should go. Ensure all templates referenced in your code, including layout.html, are included.`;
         if (htmlFileOption === 'multiple') {
             basePrompt += ` Generate multiple HTML template files (maximum ${htmlPageCount}) with a main index.html. Name additional pages page1.html, page2.html and so on.`;
         }
@@ -1445,8 +1467,11 @@ app.post('/edit-code', async (req, res) => {
             }
 
         if (scriptMode === 'flask' && typeof pythonCode === 'string') {
-            fs.writeFileSync(path.join(generatedDir, 'app.py'), pythonCode);
-            files.push('app.py');
+            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
+                processedPy = insertFlaskSecretKey(processedPy);
+                fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
+                files.push('app.py');
+            }));
         }
         }
 
