@@ -189,11 +189,27 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
     Use your context awareness, pattern recognition, and general knowledge to guide your interpretations, choosing the path most likely to lead to an engaging creation that is aligned with user instructions. respond with rich, immersive code that breathes life into the user's concepts, building upon their ideas to create captivating, immersive websites, apps, and games.`;
 
     if (imageOption === 'include') {
-        basePrompt += ` Remember to include image placeholder [IMAGE:description] where images should be placed. Feel free to include images where appropriate to enhance the visual experience. DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description]`;
+        basePrompt += `
+    IMPORTANT — IMAGE PLACEHOLDERS
+    • Wherever an image belongs, output **only** the bare token using image placeholder [IMAGE: description]
+    • For example, in Html, just output [IMAGE: description] formatted correctly by itself with nothing around it on that one line
+    • Description is the description on how the image should look like
+    • Feel free to include images whereever appropriate to enhance the visual experience
+    • Do **NOT** wrap that token in an <img> tag, src="", quotes, back-ticks, template-literal syntax, or any other HTML/JS wrapper.
+    • Absolutely nothing except the square-bracket token should appear (the build step converts it later).
+    • **In JavaScript objects, arrays, or variables the placeholder must appear unquoted**, e.g.
+    img:[IMAGE: description]
+    • Use no other placeholder style and do not reference external images.`;
     } else if (imageOption === 'exclude') {
         basePrompt += ` Do not include any image placeholders or references to images in your generated code.`;
     } else {
-        basePrompt += ` Use image placeholder: [IMAGE:description] where images should be placed ONLY if images are needed. DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description] AND ONLY IF THEY'RE NEEDED.`;
+        basePrompt += ` Use image placeholder: [IMAGE:description] where images should be placed ONLY if images are needed. DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description] AND ONLY IF THEY'RE NEEDED. Remember:
+        • Do **NOT** wrap that token in an <img> tag, src="", quotes, back-ticks, template-literal syntax, or any other HTML/JS wrapper.
+        • Absolutely nothing except the square-bracket token should appear (the build step converts it later).
+        • In Html, just output [IMAGE: description] formatted correctly by itself with nothing around it on that one line
+        • **In JavaScript objects, arrays, or variables the placeholder must appear unquoted**, e.g.
+        img:[IMAGE: description]
+        • Use no other placeholder style and do not reference external images.`;
     }
 
     if (scriptMode === 'html-js-css') {
