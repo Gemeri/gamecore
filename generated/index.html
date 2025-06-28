@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Flappy Night</title>
+
+<!-- Google-font for retro vibe -->
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+
+<style>
+:root{
+        --purple-dark:#0d001c;
+        --purple-mid:#240046;
+        --accent:#ff3af5;
+        --pipe:#00e5ff;
+        --coin-light:#fff9c4;
+        --coin-dark:#ffb300;
+}
+
+*{box-sizing:border-box;padding:0;margin:0}
+body{
+        height:100vh;
+        background:radial-gradient(circle at 50% 30%,var(--purple-mid) 0%,var(--purple-dark) 100%);
+        overflow:hidden;
+        font-family:'Press Start 2P',monospace;
+        color:#fff;
+}
+
+/* CANVAS — full height, centered */
+#gameCanvas{
+        display:block;
+        margin:0 auto;
+        background:transparent;
+}
+
+/* SCORE / COIN COUNTER */
+#ui{
+        position:absolute;
+        top:10px;
+        left:50%;
+        transform:translateX(-50%);
+        display:flex;
+        gap:30px;
+        z-index:10;
+        pointer-events:none;
+        user-select:none;
+        font-size:12px;
+}
+
+/* GAME OVER / START OVERLAY */
+#overlay{
+        position:absolute;
+        inset:0;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        background:rgba(0,0,0,.7);
+        visibility:hidden;
+        text-align:center;
+        padding:0 20px;
+}
+#overlay.show{visibility:visible;}
+
+h1{
+        font-size:28px;
+        margin-bottom:20px;
+        color:var(--accent);
+        text-shadow:0 0 10px var(--accent);
+}
+
+.button{
+        padding:12px 28px;
+        margin-top:25px;
+        border:none;
+        border-radius:6px;
+        background:var(--accent);
+        color:#fff;
+        font-size:14px;
+        cursor:pointer;
+        transition:background .25s;
+}
+.button:hover{background:#ff88fa}
+</style>
+</head>
+
+<body>
+        <canvas id="gameCanvas" width="480" height="640"></canvas>
+
+        <div id="ui">
+                <div id="scoreLabel">Score&nbsp;:&nbsp;0</div>
+                <div id="coinLabel">Coins&nbsp;:&nbsp;0</div>
+        </div>
+
+        <div id="overlay">
+                <h1 id="overlayTitle">Flappy&nbsp;Night</h1>
+                <p id="finalScore"></p>
+                <button id="startBtn" class="button">Start</button>
+        </div>
+
+<script>
+/*======================
+        CONSTANTS
+========================*/
+const canvas = document.getElementById("gameCanvas");
+const ctx     = canvas.getContext("2d");
+
+const rootStyles = getComputedStyle(document.documentElement);
+const coinLight  = rootStyles.getPropertyValue('--coin-light').trim();
+const coinDark   = rootStyles.getPropertyValue('--coin-dark').trim();
+
+const GRAVITY      = 0.2;
+const FLAP         = -5;
+const PIPE_WIDTH   = 70;
+const PIPE_GAP     = 150;
+const PIPE_INTERVAL= 1400;      // ms
+const COIN_RADIUS  = 8;
+const SPEED        = 2;
+
+/*======================
+        STATE
+========================*/
+let stars    = [];
+let bird     = {};
+let pipes    = [];
+let coins    = [];
+let score    = 0;
+let coinScore= 0;
+let lastPipe = 0;
+let gameState= "ready"; // ready | playing | over
+let animationId;
+
+/*======================
+      INITIAL SETUP
+========================*/
+createStars();
+showOverlay("Flappy Night","Start");
+
+document.getElementById("startBtn").addEventListener("click",startGame);
+document.addEventListener("keydown",e=>{
+        if(e.code==="Space"){
+                handleInput();
+                e.preventDefault();
+        }
+});
+["mousedown","touchstart"].forEach(evt=>{
+        canvas.addEventListener(evt, e=>{
+                handleInput();
+                if(evt==="touchstart") e.preventDefault();
+        },{passive:false});
+});
+
+/*======================
+        FUNCTIONS
+========================*/
+function resetGame(){
+        score = 0;
+        coinScore = 0;
+        updateLabels();
+
+        bird = {x:canvas.width/4,y:canvas.height/2,r:12,vel:0};
+        pipes = [];
+        coins = [];
+        lastPipe = 0;
+}
+
+function startGame(){
+        resetGame();
+        gameState = "playing";
+        hideOverlay();
+        loop(performance.now());
+}
+
+function endGame(){
+        gameState = "over";
+        cancelAnimationFrame(animationId);
+        showOverlay("Game Over","Restart",`Your score: ${score} | Coins: ${coinScore}`);
+}
+
+function handleInput(){
+        if(gameState==="ready") startGame();
+        else if(gameState==="playing") bird.vel = FLAP;
+        else if(gameState==="over") startGame();
+}
+
+function loop(timestamp){
+        if(gameState!=="playing") return;
+
+        // Pipe generation timing
+        if(timestamp - lastPipe > PIPE_INTERVAL){
+                createPipe();
+                lastPipe = timestamp;
+        }
+
+        update();
+        draw();
+        animationId = requestAnimationFrame(loop);
+}
+
+function update(){
+        /* --- Bird physics --- */
+        bird.vel += GRAVITY;
+        bird.y   += bird.vel;
+
+        if(bird.y + bird.r > canvas.height || bird.y - bird.r < 0){
+                endGame(); return;
+        }
+
+        /* --- Pipes --- */
+        for(let i=pipes.length-1;i>=0;i--){
+                let p = pipes[i];
+                p.x -= SPEED;
+
+                // Score when passed
+                if(!p.passed && p.x + PIPE_WIDTH < bird.x){
+                        p.passed = true;
+                        score++;
+                        updateLabels();
+                }
+
+                // Collision
+                if(collidesPipe(p)){
+                        endGame(); return;
+                }
+
+                // Off–screen cleanup
+                if(p.x + PIPE_WIDTH < 0) pipes.splice(i,1);
+        }
+
+        /* --- Coins --- */
+        for(let i=coins.length-1;i>=0;i--){
+                let c = coins[i];
+                c.x -= SPEED;
+
+                if(!c.collected && distance(bird.x,bird.y,c.x,c.y) < bird.r + COIN_RADIUS){
+                        c.collected = true;
+                        coinScore++;
+                        updateLabels();
+                }
+
+                if(c.x + COIN_RADIUS < 0) coins.splice(i,1);
+        }
+}
+
+function collidesPipe(pipe){
+        // Top
+        if(bird.x + bird.r > pipe.x && bird.x - bird.r < pipe.x + PIPE_WIDTH){
+                if(bird.y - bird.r < pipe.topH || bird.y + bird.r > pipe.bottomY) return true;
+        }
+        return false;
+}
+
+function createPipe(){
+        let minHeight = 50;
+        let maxTop    = canvas.height - PIPE_GAP - 100;
+        let topH      = Math.random()*maxTop + minHeight;
+        let bottomY   = topH + PIPE_GAP;
+
+        pipes.push({x:canvas.width,topH:topH,bottomY:bottomY,passed:false});
+
+        // 80% chance to spawn a coin between pipes
+        if(Math.random()<0.8){
+                coins.push({x:canvas.width + PIPE_WIDTH/2,y:topH + PIPE_GAP/2,collected:false});
+        }
+}
+
+function updateLabels(){
+        document.getElementById("scoreLabel").textContent = `Score : ${score}`;
+        document.getElementById("coinLabel").textContent  = `Coins : ${coinScore}`;
+}
+
+function draw(){
+        // Clear
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        // Gradient background (extra layer to dark purple backdrop from CSS)
+        let grd = ctx.createLinearGradient(0,0,0,canvas.height);
+        grd.addColorStop(0,"#240046");
+        grd.addColorStop(1,"#0d001c");
+        ctx.fillStyle = grd;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+
+        // Stars (static)
+        ctx.fillStyle = "rgba(255,255,255,.35)";
+        stars.forEach(s=>ctx.fillRect(s.x,s.y,1,1));
+
+        // Pipes
+        ctx.fillStyle = "var(--pipe)";
+        pipes.forEach(p=>{
+                ctx.fillRect(p.x,0,PIPE_WIDTH,p.topH);
+                ctx.fillRect(p.x,p.bottomY,PIPE_WIDTH,canvas.height - p.bottomY);
+        });
+
+        // Coins
+        coins.forEach(c=>{
+            if(c.collected) return;
+            // create gradient using the resolved values
+            let gradient = ctx.createRadialGradient(c.x, c.y, 1, c.x, c.y, COIN_RADIUS);
+            gradient.addColorStop(0, coinLight);
+            gradient.addColorStop(1, coinDark);
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, COIN_RADIUS, 0, Math.PI*2);
+            ctx.fill();
+        });
+
+        // Bird
+        drawBird();
+}
+
+function drawBird(){
+        ctx.save();
+        ctx.translate(bird.x,bird.y);
+        ctx.rotate(Math.min(bird.vel/10,Math.PI/4));
+
+        // Body
+        ctx.fillStyle="#ffde59";
+        ctx.beginPath();
+        ctx.arc(0,0,bird.r,0,Math.PI*2);
+        ctx.fill();
+
+        // Wing
+        ctx.fillStyle="#ffb74d";
+        ctx.beginPath();
+        ctx.arc(-4,0,6,Math.PI/2,-Math.PI/2,true);
+        ctx.fill();
+
+        // Eye
+        ctx.fillStyle="#000";
+        ctx.beginPath();
+        ctx.arc(5,-4,2,0,Math.PI*2);
+        ctx.fill();
+
+        ctx.restore();
+}
+
+function distance(x1,y1,x2,y2){
+        return Math.hypot(x2-x1,y2-y1);
+}
+
+function createStars(){
+        for(let i=0;i<60;i++){
+                stars.push({
+                        x:Math.random()*canvas.width,
+                        y:Math.random()*canvas.height
+                });
+        }
+}
+
+function showOverlay(title,btnText,sub=""){
+        const ov = document.getElementById("overlay");
+        document.getElementById("overlayTitle").textContent = title;
+        document.getElementById("finalScore").textContent   = sub;
+        document.getElementById("startBtn").textContent     = btnText;
+        ov.classList.add("show");
+}
+
+function hideOverlay(){
+        document.getElementById("overlay").classList.remove("show");
+}
+</script>
+</body>
+</html>
