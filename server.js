@@ -499,13 +499,13 @@ function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
     let htmlCode, cssCode, jsCode, additionalHtmlCodes = [];
 
     const extractCode = (language) => {
-        const regex = new RegExp(`\`\`\`${language}([\\s\\S]*?)\`\`\``, 'i');
+        const regex = new RegExp(`\`\`\`\s*${language}\s*([\\s\\S]*?)\`\`\``, 'i');
         const match = aiReply.match(regex);
         return match ? match[1].trim() : null;
     };
 
     const extractHtmlWithFileName = (content) => {
-        const regex = /html\s*(?:\/\/\s*([^\n]+))?\s*([\s\S]*?)/g;
+        const regex = /([\w.-]+\.html)[^\n]*\n(?:.*\n)*?\`\`\`html\s*([\s\S]*?)\`\`\`/g;
         let match;
         let result = [];
         while ((match = regex.exec(content)) !== null) {
@@ -513,6 +513,14 @@ function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
             const code = match[2].trim();
             result.push({ fileName, code });
         }
+
+        if (result.length === 0) {
+            const simpleMatch = content.match(/\`\`\`html\s*([\s\S]*?)\`\`\`/i);
+            if (simpleMatch) {
+                result.push({ fileName: null, code: simpleMatch[1].trim() });
+            }
+        }
+
         return result;
     };
 
@@ -884,7 +892,10 @@ function checkIfCodeComplete(htmlCode, cssCode, jsCode, additionalHtmlCodes, scr
         const isHtmlComplete = typeof htmlCode === 'string' && htmlCode.trim() !== '';
         const isCssComplete = typeof cssCode === 'string' && cssCode.trim() !== '';
         const isJsComplete = typeof jsCode === 'string' && jsCode.trim() !== '';
-        const areAdditionalHtmlComplete = additionalHtmlCodes.every(code => typeof code === 'string' && code.trim() !== '');
+        const areAdditionalHtmlComplete = additionalHtmlCodes.every(item => {
+            const code = typeof item === 'string' ? item : item.code;
+            return typeof code === 'string' && code.trim() !== '';
+        });
         
         return isHtmlComplete && isCssComplete && isJsComplete && areAdditionalHtmlComplete;
     }
