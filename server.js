@@ -722,9 +722,10 @@ app.post('/generate-code', async (req, res) => {
             }
 
             if (htmlFileOption === 'multiple' && Array.isArray(additionalHtmlCodes)) {
-                additionalHtmlCodes.forEach((code, index) => {
+                additionalHtmlCodes.forEach((codeObj, index) => {
+                    const htmlFileName = (codeObj && codeObj.fileName) ? codeObj.fileName : `page${index + 1}.html`;
+                    const code = (codeObj && codeObj.code) ? codeObj.code : codeObj;
                     if (typeof code === 'string') {
-                        const htmlFileName = `page${index + 1}.html`;
                         processPromises.push(processCodeAndImages(code, 'html', htmlFileName, index + 1).then(processedCode => {
                             fs.writeFileSync(path.join(generatedDir, htmlFileName), processedCode);
                             files.push(htmlFileName);
@@ -755,11 +756,13 @@ app.post('/generate-code', async (req, res) => {
             }
 
             if (htmlFileOption === 'multiple' && Array.isArray(additionalHtmlCodes)) {
-                additionalHtmlCodes.forEach((code, index) => {
+                additionalHtmlCodes.forEach((codeObj, index) => {
+                    const htmlFileName = (codeObj && codeObj.fileName) ? codeObj.fileName : `page${index + 1}.html`;
+                    const code = (codeObj && codeObj.code) ? codeObj.code : codeObj;
                     if (typeof code === 'string') {
-                        processPromises.push(processCodeAndImages(code, 'html', index + 1).then(processedCode => {
-                            fs.writeFileSync(path.join(generatedDir, `page${index + 1}.html`), processedCode);
-                            files.push(`page${index + 1}.html`);
+                        processPromises.push(processCodeAndImages(code, 'html', htmlFileName).then(processedCode => {
+                            fs.writeFileSync(path.join(generatedDir, htmlFileName), processedCode);
+                            files.push(htmlFileName);
                         }));
                     }
                 });
