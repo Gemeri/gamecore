@@ -1,0 +1,937 @@
+<html><head><base href="https://webgamewar.com/3d-map-battle/" target="_blank"><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>3D Campsite Battle - Ground Level</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+    #instructions {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: white;
+        font-family: Arial, sans-serif;
+        background-color: rgba(0,0,0,0.5);
+        padding: 10px;
+        border-radius: 5px;
+    }
+</style>
+</head>
+<body>
+<div id="instructions">Use WASD to move, mouse to look around. Watch the battle unfold!</div>
+<script>
+// Scene setup
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 300);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.05);
+scene.add(ambientLight);
+const cityLight = new THREE.PointLight(0xffffff, 1, 200);
+cityLight.position.set(0, 50, -150);
+scene.add(cityLight);
+
+// Ground
+const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x111111 });
+const groundGeometry = new THREE.PlaneGeometry(400, 400);
+const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+ground.rotation.x = -Math.PI / 2;
+ground.position.set(0, 0, -100);
+scene.add(ground);
+
+// River
+const riverGeometry = new THREE.PlaneGeometry(5, 150);
+const riverMaterial = new THREE.MeshLambertMaterial({ color: 0x4169E1 });
+const river = new THREE.Mesh(riverGeometry, riverMaterial);
+river.rotation.x = -Math.PI / 2;
+river.position.set(0, 0.1, -25);
+scene.add(river);
+
+// Bridge
+const bridgeGeometry = new THREE.BoxGeometry(7, 0.5, 10);
+const bridgeMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+const bridge = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
+bridge.position.set(0, 0.25, 0);
+scene.add(bridge);
+
+// Create a hat
+function createHat(color) {
+    const hatGeometry = new THREE.ConeGeometry(0.4, 0.4, 32);
+    const hatMaterial = new THREE.MeshLambertMaterial({ color: color });
+    const hat = new THREE.Mesh(hatGeometry, hatMaterial);
+    return hat;
+}
+
+// Soldier class
+class Soldier {
+    constructor(color, position) {
+        this.color = color;
+        this.position = position;
+        this.health = 100;
+        this.mesh = this.createMesh();
+        this.gun = this.createGun();
+        this.bullets = [];
+        this.lastShotTime = 0;
+        scene.add(this.mesh);
+        scene.add(this.gun);
+    }
+
+    createMesh() {
+        const geometry = new THREE.CylinderGeometry(0.3, 0.3, 1.8, 32);
+        const material = new THREE.MeshLambertMaterial({ color: this.color });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.copy(this.position);
+        return mesh;
+    }
+
+    createGun() {
+        const gunGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.5);
+        const gunMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const gun = new THREE.Mesh(gunGeometry, gunMaterial);
+        gun.position.copy(this.position);
+        gun.position.y += 0.5;
+        return gun;
+    }
+
+    update(enemySoldiers, player) {
+        if (this.health <= 0 || !battleStarted) return;
+
+        let target = this.findClosestEnemy(enemySoldiers);
+        if (player && player.team !== this.color) {
+            const playerDistance = this.position.distanceTo(player.position);
+            if (!target || playerDistance < this.position.distanceTo(target.position)) {
+                target = player;
+            }
+        }
+
+        if (target) {
+            const direction = new THREE.Vector3().subVectors(target.position, this.position).normalize();
+            const newPosition = this.position.clone().add(direction.multiplyScalar(0.05));
+            
+            if (!checkTentCollision(newPosition, 0.3) && !checkSkyscraperCollision(newPosition, 0.3)) {
+                this.position.copy(newPosition);
+                this.mesh.position.copy(this.position);
+                this.gun.position.copy(this.position);
+                this.gun.position.y += 0.5;
+
+                this.mesh.lookAt(target.position);
+                this.gun.lookAt(target.position);
+
+                if (Date.now() - this.lastShotTime > 1000) {
+                    this.shoot(target);
+                    this.lastShotTime = Date.now();
+                }
+            }
+        }
+
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const bullet = this.bullets[i];
+            const newPosition = bullet.position.clone().add(bullet.velocity);
+            
+            if (checkTentCollision(newPosition, 0.1) || checkSkyscraperCollision(newPosition, 0.1)) {
+                scene.remove(bullet);
+                this.bullets.splice(i, 1);
+                continue;
+            }
+            
+            bullet.position.copy(newPosition);
+
+            for (const enemy of enemySoldiers) {
+                if (enemy.health > 0 && bullet.position.distanceTo(enemy.position) < 0.5) {
+                    enemy.health -= 20;
+                    scene.remove(bullet);
+                    this.bullets.splice(i, 1);
+                    if (enemy.health <= 0) {
+                        scene.remove(enemy.mesh);
+                        scene.remove(enemy.gun);
+                    }
+                    break;
+                }
+            }
+
+            if (player.health > 0 && bullet.position.distanceTo(player.position) < 0.5) {
+                player.health = 0;
+                scene.remove(bullet);
+                this.bullets.splice(i, 1);
+                createDeathScreen();
+                scene.remove(camera);
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('keydown', onKeyDown);
+                document.removeEventListener('keyup', onKeyUp);
+                renderer.domElement.removeEventListener('click', playerShoot);
+                break;
+            }
+
+            if (bullet.position.length() > 50) {
+                scene.remove(bullet);
+                this.bullets.splice(i, 1);
+            }
+        }
+    }
+
+    findClosestEnemy(enemySoldiers) {
+        let closestEnemy = null;
+        let closestDistance = Infinity;
+        for (const enemy of enemySoldiers) {
+            if (enemy.health > 0) {
+                const distance = this.position.distanceTo(enemy.position);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestEnemy = enemy;
+                }
+            }
+        }
+        return closestEnemy;
+    }
+
+    shoot(target) {
+        const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+        const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFF00 });
+        const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+        bullet.position.copy(this.gun.position);
+
+        const direction = new THREE.Vector3().subVectors(target.position, this.gun.position).normalize();
+        bullet.velocity = direction.multiplyScalar(0.5);
+
+        scene.add(bullet);
+        this.bullets.push(bullet);
+    }
+}
+
+// Create a tent
+function createTent(color, position) {
+    const tentGroup = new THREE.Group();
+    
+    const baseGeometry = new THREE.CylinderGeometry(1, 1.5, 2, 6);
+    const baseMaterial = new THREE.MeshLambertMaterial({ color: color });
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    
+    const topGeometry = new THREE.ConeGeometry(1.5, 1, 6);
+    const topMaterial = new THREE.MeshLambertMaterial({ color: color });
+    const top = new THREE.Mesh(topGeometry, topMaterial);
+    top.position.y = 1.5;
+    
+    tentGroup.add(base);
+    tentGroup.add(top);
+    tentGroup.position.set(position.x, position.y, position.z);
+    
+    return tentGroup;
+}
+
+// Function to create tent collision box
+function createTentCollisionBox(position) {
+    const geometry = new THREE.BoxGeometry(3, 3, 3);
+    const material = new THREE.MeshBasicMaterial({ visible: false });
+    const collisionBox = new THREE.Mesh(geometry, material);
+    collisionBox.position.copy(position);
+    scene.add(collisionBox);
+    return collisionBox;
+}
+
+// Create an array to store tent collision boxes
+const tentCollisionBoxes = [];
+
+// Create campsite function
+function createCampsite(color, centerX, centerZ, radius) {
+    const tents = [];
+    const soldiers = [];
+    const tentCount = 10;
+    const soldierCount = 20;
+
+    for (let i = 0; i < tentCount; i++) {
+        const angle = (i / tentCount) * Math.PI * 2;
+        const x = centerX + Math.cos(angle) * radius * Math.random();
+        const z = centerZ + Math.sin(angle) * radius * Math.random();
+        const tentPosition = new THREE.Vector3(x, 1, z);
+        const tent = createTent(color, tentPosition);
+        scene.add(tent);
+        tentCollisionBoxes.push(createTentCollisionBox(tentPosition));
+        tents.push(tent);
+    }
+
+    for (let i = 0; i < soldierCount; i++) {
+        const angle = (i / soldierCount) * Math.PI * 2;
+        const x = centerX + Math.cos(angle) * (radius - 2) * Math.random();
+        const z = centerZ + Math.sin(angle) * (radius - 2) * Math.random();
+        const soldier = new Soldier(color, new THREE.Vector3(x, 1, z));
+        soldiers.push(soldier);
+    }
+
+    return { tents, soldiers };
+}
+
+// Create the original campsites
+for (let i = 0; i < 10; i++) {
+    const redTentPosition = new THREE.Vector3(-20 + Math.random() * 10, 1, -20 + Math.random() * 40);
+    const redTent = createTent(0xFF0000, redTentPosition);
+    scene.add(redTent);
+    tentCollisionBoxes.push(createTentCollisionBox(redTentPosition));
+}
+
+for (let i = 0; i < 10; i++) {
+    const blueTentPosition = new THREE.Vector3(20 + Math.random() * 10, 1, -20 + Math.random() * 40);
+    const blueTent = createTent(0x0000FF, blueTentPosition);
+    scene.add(blueTent);
+    tentCollisionBoxes.push(createTentCollisionBox(blueTentPosition));
+}
+
+// Create new campsites
+const newRedCampsite = createCampsite(0xFF0000, 80, 80, 15);
+const newBlueCampsite = createCampsite(0x0000FF, 80, -80, 15);
+
+// Leader class
+class Leader extends Soldier {
+    constructor(color, position) {
+        super(color, position);
+        this.mesh.scale.set(1.2, 1.2, 1.2);
+        this.isLeader = true;
+        
+        // Add hat to the leader
+        this.hat = createHat(this.color);
+        this.hat.position.y = 1.4; 
+        this.mesh.add(this.hat);
+    }
+
+    update(enemySoldiers, player) {
+        if (this.health <= 0 || !battleStarted) return;
+
+        super.update(enemySoldiers, player);
+    }
+}
+
+// Create leaders
+const redLeader = new Leader(0xFF0000, new THREE.Vector3(-25, 1, 0));
+const blueLeader = new Leader(0x0000FF, new THREE.Vector3(25, 1, 0));
+const newRedLeader = new Leader(0xFF0000, new THREE.Vector3(80, 1, 80));
+const newBlueLeader = new Leader(0x0000FF, new THREE.Vector3(80, 1, -80));
+scene.add(redLeader.mesh);
+scene.add(redLeader.gun);
+scene.add(blueLeader.mesh);
+scene.add(blueLeader.gun);
+scene.add(newRedLeader.mesh);
+scene.add(newRedLeader.gun);
+scene.add(newBlueLeader.mesh);
+scene.add(newBlueLeader.gun);
+
+// Create soldiers
+const redSoldiers = [];
+const blueSoldiers = [];
+for (let i = 0; i < 20; i++) {
+    redSoldiers.push(new Soldier(0xFF0000, new THREE.Vector3(-25 + Math.random() * 20, 1, -25 + Math.random() * 50)));
+    blueSoldiers.push(new Soldier(0x0000FF, new THREE.Vector3(25 + Math.random() * 20, 1, -25 + Math.random() * 50)));
+}
+
+// Player setup
+const player = {
+    height: 1.8,
+    speed: 0.1,
+    turnSpeed: 0.005,
+    position: new THREE.Vector3(0, 0, 30),
+    rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
+    team: null,
+    health: 100,
+};
+
+function checkTentCollision(position, radius) {
+    for (const tent of tentCollisionBoxes) {
+        if (position.distanceTo(tent.position) < radius + 1.5) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function createDeathScreen() {
+    const deathScreen = document.createElement('div');
+    deathScreen.style.position = 'absolute';
+    deathScreen.style.top = '0';
+    deathScreen.style.left = '0';
+    deathScreen.style.width = '100%';
+    deathScreen.style.height = '100%';
+    deathScreen.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
+    deathScreen.style.display = 'flex';
+    deathScreen.style.justifyContent = 'center';
+    deathScreen.style.alignItems = 'center';
+    deathScreen.style.fontSize = '48px';
+    deathScreen.style.color = 'white';
+    deathScreen.style.zIndex = '1000';
+    deathScreen.textContent = 'You died';
+    document.body.appendChild(deathScreen);
+}
+
+function createExplosion(position) {
+    const particleCount = 20;
+    const geometry = new THREE.BufferGeometry();
+    const positions = [];
+    const colors = [];
+
+    for (let i = 0; i < particleCount; i++) {
+        positions.push((Math.random() - 0.5) * 2);
+        positions.push((Math.random() - 0.5) * 2);
+        positions.push((Math.random() - 0.5) * 2);
+        colors.push(1, 0.5, 0);
+    }
+
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({ size: 0.1, vertexColors: true });
+    const particles = new THREE.Points(geometry, material);
+    particles.position.copy(position);
+    scene.add(particles);
+
+    setTimeout(() => {
+        scene.remove(particles);
+    }, 1000);
+}
+
+camera.position.set(player.position.x, player.position.y + player.height, player.position.z);
+
+// Firework class
+class Firework {
+    constructor(position) {
+        this.position = position.clone();
+        this.velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.5,
+            2 + Math.random() * 1.5,
+            (Math.random() - 0.5) * 0.5
+        );
+        this.color = new THREE.Color(
+            Math.random(),
+            Math.random(),
+            Math.random()
+        ).multiplyScalar(1.5);
+        this.particles = [];
+        this.lifetime = 0;
+        this.exploded = false;
+    }
+
+    update() {
+        if (!this.exploded) {
+            this.position.add(this.velocity);
+            this.lifetime++;
+            if (this.lifetime > 40) {
+                this.explode();
+            }
+        } else {
+            for (let particle of this.particles) {
+                particle.position.add(particle.velocity);
+                particle.velocity.y -= 0.01;
+                particle.scale.multiplyScalar(0.99);
+            }
+        }
+    }
+
+    explode() {
+        this.exploded = true;
+        for (let i = 0; i < 100; i++) {
+            const particle = new THREE.Mesh(
+                new THREE.SphereGeometry(0.2, 8, 8),
+                new THREE.MeshBasicMaterial({ color: this.color })
+            );
+            particle.position.copy(this.position);
+            particle.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 1,
+                (Math.random() - 0.5) * 1,
+                (Math.random() - 0.5) * 1
+            );
+            this.particles.push(particle);
+            scene.add(particle);
+        }
+    }
+}
+
+const fireworks = [];
+
+function launchFirework() {
+    const cityCenter = new THREE.Vector3(0, 0, -150);
+    const launchPosition = new THREE.Vector3(
+        (Math.random() - 0.5) * 60,
+        10,
+        (Math.random() - 0.5) * 60
+    ).add(cityCenter);
+    const firework = new Firework(launchPosition);
+    fireworks.push(firework);
+}
+
+// Movement variables
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+
+// Battle mechanism variables
+let battleStarted = false;
+
+// Function to handle leader interaction
+function interactWithLeader(leader) {
+    if (!battleStarted) {
+        battleStarted = true;
+        player.team = leader.color;
+        const teamName = leader.color === 0xFF0000 ? "Red" : "Blue";
+        alert(`You've joined the ${teamName} team! The battle has begun!`);
+    }
+}
+
+// City entity classes
+class CityEntity {
+    constructor(color, position) {
+        this.color = color;
+        this.position = position;
+        this.position.y = 0.9;
+        this.mesh = this.createMesh();
+        scene.add(this.mesh);
+        this.targetPosition = null;
+        this.speed = 0.05;
+    }
+
+    createMesh() {
+        const geometry = new THREE.CylinderGeometry(0.3, 0.3, 1.8, 32);
+        const material = new THREE.MeshLambertMaterial({ color: this.color });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.copy(this.position);
+        return mesh;
+    }
+
+    update(roadPositions) {
+        if (!this.targetPosition || this.position.distanceTo(this.targetPosition) < 0.1) {
+            this.targetPosition = roadPositions[Math.floor(Math.random() * roadPositions.length)];
+            this.targetPosition.y = 0.9;
+        }
+
+        const direction = new THREE.Vector3().subVectors(this.targetPosition, this.position).normalize();
+        const newPosition = this.position.clone().add(direction.multiplyScalar(this.speed));
+        newPosition.y = 0.9;
+        
+        if (!checkSkyscraperCollision(newPosition, 0.3)) {
+            this.position.copy(newPosition);
+            this.mesh.position.copy(this.position);
+            this.mesh.lookAt(this.targetPosition);
+        } else {
+            this.targetPosition = null;
+        }
+    }
+}
+
+class CityPatrol extends CityEntity {
+    constructor(position) {
+        super(0x0000FF, position);
+    }
+}
+
+class CityCivilian extends CityEntity {
+    constructor(position) {
+        super(0x00FF00, position);
+    }
+}
+
+// Function to generate road positions
+function generateRoadPositions() {
+    const roadPositions = [];
+    const gridSize = 5;
+    const blockSize = 10;
+    const roadWidth = 5;
+    const cityCenter = new THREE.Vector3(0, 0.9, -150);
+
+    for (let i = 0; i <= gridSize; i++) {
+        for (let j = 0; j <= gridSize; j++) {
+            const x = (i - gridSize / 2) * (blockSize + roadWidth);
+            const z = (j - gridSize / 2) * (blockSize + roadWidth);
+            roadPositions.push(new THREE.Vector3(x, 0.9, z).add(cityCenter));
+        }
+    }
+
+    return roadPositions;
+}
+
+// Generate road positions
+const roadPositions = generateRoadPositions();
+
+// Create city entities
+const cityEntities = [];
+for (let i = 0; i < 10; i++) {
+    const randomPosition = roadPositions[Math.floor(Math.random() * roadPositions.length)];
+    cityEntities.push(new CityPatrol(randomPosition.clone()));
+}
+for (let i = 0; i < 20; i++) {
+    const randomPosition = roadPositions[Math.floor(Math.random() * roadPositions.length)];
+    cityEntities.push(new CityCivilian(randomPosition.clone()));
+}
+
+// Mouse control
+let mouseX = 0;
+let mouseY = 0;
+document.addEventListener('mousemove', onMouseMove);
+document.addEventListener('click', playerShoot);
+
+// Lock pointer
+renderer.domElement.addEventListener('click', () => {
+    renderer.domElement.requestPointerLock();
+});
+
+// Keyboard control
+document.addEventListener('keydown', onKeyDown);
+document.addEventListener('keyup', onKeyUp);
+
+function onMouseMove(event) {
+    const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+    const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+    player.rotation.y -= movementX * player.turnSpeed;
+    player.rotation.x -= movementY * player.turnSpeed;
+    player.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.rotation.x));
+}
+
+function onKeyDown(event) {
+    switch(event.code) {
+        case 'KeyW': moveForward = true; break;
+        case 'KeyS': moveBackward = true; break;
+        case 'KeyA': moveLeft = true; break;
+        case 'KeyD': moveRight = true; break;
+        case 'KeyE': {
+            const redDistance = player.position.distanceTo(redLeader.position);
+            const blueDistance = player.position.distanceTo(blueLeader.position);
+            const newRedDistance = player.position.distanceTo(newRedLeader.position);
+            const newBlueDistance = player.position.distanceTo(newBlueLeader.position);
+            
+            if (redDistance < 5) {
+                interactWithLeader(redLeader);
+            } else if (blueDistance < 5) {
+                interactWithLeader(blueLeader);
+            } else if (newRedDistance < 5) {
+                interactWithLeader(newRedLeader);
+            } else if (newBlueDistance < 5) {
+                interactWithLeader(newBlueLeader);
+            }
+            break;
+        }
+    }
+}
+
+function onKeyUp(event) {
+    switch(event.code) {
+        case 'KeyW': moveForward = false; break;
+        case 'KeyS': moveBackward = false; break;
+        case 'KeyA': moveLeft = false; break;
+        case 'KeyD': moveRight = false; break;
+    }
+}
+
+// Shooting
+let playerBullets = [];
+
+// Function to handle player shooting
+function playerShoot() {
+    if (!battleStarted || !player.team) return;
+
+    const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+    const bulletMaterial = new THREE.MeshBasicMaterial({ color: player.team });
+    const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+    bullet.position.copy(camera.position);
+
+    const direction = new THREE.Vector3();
+    camera.getWorldDirection(direction);
+    bullet.velocity = direction.multiplyScalar(0.5);
+
+    bullet.team = player.team;
+
+    scene.add(bullet);
+    playerBullets.push(bullet);
+}
+
+// Create city wall
+function createCityWall() {
+    const wallGroup = new THREE.Group();
+    const wallHeight = 15;
+    const wallThickness = 2;
+    const citySize = 80; 
+
+    const wallGeometry = new THREE.BoxGeometry(citySize, wallHeight, wallThickness);
+    const wallMaterial = new THREE.MeshPhongMaterial({
+        color: 0x808080,
+        emissive: 0x404040,
+        emissiveIntensity: 0.2
+    });
+
+    const northWall = new THREE.Mesh(wallGeometry, wallMaterial);
+    northWall.position.set(0, wallHeight / 2, -citySize / 2);
+    wallGroup.add(northWall);
+
+    const southWall = new THREE.Mesh(wallGeometry, wallMaterial);
+    southWall.position.set(0, wallHeight / 2, citySize / 2);
+    wallGroup.add(southWall);
+
+    const eastWall = new THREE.Mesh(wallGeometry, wallMaterial);
+    eastWall.rotation.y = Math.PI / 2;
+    eastWall.position.set(citySize / 2, wallHeight / 2, 0);
+    wallGroup.add(eastWall);
+
+    const westWall = new THREE.Mesh(wallGeometry, wallMaterial);
+    westWall.rotation.y = Math.PI / 2;
+    westWall.position.set(-citySize / 2, wallHeight / 2, 0);
+    wallGroup.add(westWall);
+
+    wallGroup.position.set(0, 0, -150);
+    return wallGroup;
+}
+
+const cityWall = createCityWall();
+scene.add(cityWall);
+
+// Create a 5x5 grid road pattern
+function createRoadGrid() {
+    const roadGroup = new THREE.Group();
+    const roadWidth = 5;
+    const blockSize = 10;
+    const gridSize = 5;
+
+    const roadGeometry = new THREE.PlaneGeometry(roadWidth, gridSize * (blockSize + roadWidth));
+    const roadMaterial = new THREE.MeshPhongMaterial({
+        color: 0x333333,
+        emissive: 0x111111,
+        emissiveIntensity: 0.2
+    });
+
+    for (let i = 0; i <= gridSize; i++) {
+        const horizontalRoad = new THREE.Mesh(roadGeometry, roadMaterial);
+        horizontalRoad.rotation.x = -Math.PI / 2;
+        horizontalRoad.position.set(
+            (i - gridSize / 2) * (blockSize + roadWidth),
+            0.1,
+            0
+        );
+        roadGroup.add(horizontalRoad);
+
+        const verticalRoad = new THREE.Mesh(roadGeometry, roadMaterial);
+        verticalRoad.rotation.x = -Math.PI / 2;
+        verticalRoad.rotation.z = Math.PI / 2;
+        verticalRoad.position.set(
+            0,
+            0.1,
+            (i - gridSize / 2) * (blockSize + roadWidth)
+        );
+        roadGroup.add(verticalRoad);
+    }
+
+    roadGroup.position.set(0, 0, -150);
+    return roadGroup;
+}
+
+const roadGrid = createRoadGrid();
+scene.add(roadGrid);
+
+// Add skyscrapers
+function createSkyscrapers() {
+    const skyscraperGroup = new THREE.Group();
+    const gridSize = 5;
+    const blockSize = 10;
+    const roadWidth = 5;
+
+    function getRandomColor() {
+        return Math.random() * 0xffffff;
+    }
+
+    for (let x = 0; x < gridSize; x++) {
+        for (let z = 0; z < gridSize; z++) {
+            const height = 10 + Math.random() * 30;
+            const geometry = new THREE.BoxGeometry(8, height, 8);
+            const color = getRandomColor();
+            const material = new THREE.MeshPhongMaterial({
+                color: color,
+                emissive: color,
+                emissiveIntensity: 0.5
+            });
+            const skyscraper = new THREE.Mesh(geometry, material);
+
+            skyscraper.position.set(
+                (x - gridSize / 2 + 0.5) * (blockSize + roadWidth),
+                height / 2,
+                (z - gridSize / 2 + 0.5) * (blockSize + roadWidth)
+            );
+
+            // Add a point light to each skyscraper
+            const light = new THREE.PointLight(color, 0.5, 20);
+            light.position.copy(skyscraper.position);
+            light.position.y = height;
+            skyscraperGroup.add(light);
+
+            skyscraperGroup.add(skyscraper);
+        }
+    }
+
+    skyscraperGroup.position.set(0, 0, -150);
+    return skyscraperGroup;
+}
+
+const skyscrapers = createSkyscrapers();
+scene.add(skyscrapers);
+
+// Function to check skyscraper collision
+function checkSkyscraperCollision(position, radius) {
+    const gridSize = 5;
+    const blockSize = 10;
+    const roadWidth = 5;
+    const cityCenter = new THREE.Vector3(0, 0.9, -150);
+
+    for (let x = 0; x < gridSize; x++) {
+        for (let z = 0; z < gridSize; z++) {
+            const skyscraperPosition = new THREE.Vector3(
+                (x - gridSize / 2 + 0.5) * (blockSize + roadWidth),
+                0,
+                (z - gridSize / 2 + 0.5) * (blockSize + roadWidth)
+            ).add(cityCenter);
+
+            if (position.distanceTo(skyscraperPosition) < radius + 4) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Add lights to campsites
+function addCampsiteLights() {
+    // Red campsite lights
+    const redCampsiteLight = new THREE.PointLight(0xFF0000, 0.5, 30);
+    redCampsiteLight.position.set(-20, 5, 0);
+    scene.add(redCampsiteLight);
+
+    const newRedCampsiteLight = new THREE.PointLight(0xFF0000, 0.5, 30);
+    newRedCampsiteLight.position.set(80, 5, 80);
+    scene.add(newRedCampsiteLight);
+
+    // Blue campsite lights
+    const blueCampsiteLight = new THREE.PointLight(0x0000FF, 0.5, 30);
+    blueCampsiteLight.position.set(20, 5, 0);
+    scene.add(blueCampsiteLight);
+
+    const newBlueCampsiteLight = new THREE.PointLight(0x0000FF, 0.5, 30);
+    newBlueCampsiteLight.position.set(80, 5, -80);
+    scene.add(newBlueCampsiteLight);
+}
+
+// Call the function to add campsite lights
+addCampsiteLights();
+
+// Animation loop
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (player.health <= 0) {
+        renderer.render(scene, camera);
+        return;
+    }
+
+    const forward = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+    forward.y = 0;
+    forward.normalize();
+
+    const moveDirection = new THREE.Vector3();
+    if (moveForward) moveDirection.add(forward);
+    if (moveBackward) moveDirection.sub(forward);
+    if (moveRight) moveDirection.add(right);
+    if (moveLeft) moveDirection.sub(right);
+
+    if (moveForward || moveBackward || moveRight || moveLeft) {
+        moveDirection.normalize().multiplyScalar(player.speed);
+        const newPosition = player.position.clone().add(moveDirection);
+        if (!checkTentCollision(newPosition, 0.5) && !checkSkyscraperCollision(newPosition, 0.5)) {
+            player.position.copy(newPosition);
+        }
+    }
+
+    camera.position.set(player.position.x, player.position.y + player.height, player.position.z);
+    camera.rotation.copy(player.rotation);
+
+    // Update city entities
+    for (const entity of cityEntities) {
+        entity.update(roadPositions);
+    }
+
+    if (battleStarted) {
+        const allRedSoldiers = redSoldiers.concat(newRedCampsite.soldiers);
+        const allBlueSoldiers = blueSoldiers.concat(newBlueCampsite.soldiers);
+
+        for (const soldier of allRedSoldiers) {
+            soldier.update(allBlueSoldiers, player);
+        }
+        for (const soldier of allBlueSoldiers) {
+            soldier.update(allRedSoldiers, player);
+        }
+
+        redLeader.update(allBlueSoldiers.concat([blueLeader, newBlueLeader]), player);
+        blueLeader.update(allRedSoldiers.concat([redLeader, newRedLeader]), player);
+        newRedLeader.update(allBlueSoldiers.concat([blueLeader, newBlueLeader]), player);
+        newBlueLeader.update(allRedSoldiers.concat([redLeader, newRedLeader]), player);
+
+        for (let i = playerBullets.length - 1; i >= 0; i--) {
+            const bullet = playerBullets[i];
+            const newBulletPosition = bullet.position.clone().add(bullet.velocity);
+            
+            if (checkTentCollision(newBulletPosition, 0.1) || checkSkyscraperCollision(newBulletPosition, 0.1)) {
+                scene.remove(bullet);
+                playerBullets.splice(i, 1);
+                continue;
+            }
+            
+            bullet.position.copy(newBulletPosition);
+
+            const enemySoldiers = bullet.team === 0xFF0000 ? allBlueSoldiers : allRedSoldiers;
+            for (const enemy of enemySoldiers) {
+                if (enemy.health > 0 && bullet.position.distanceTo(enemy.position) < 1) {
+                    enemy.health -= 100;
+                    scene.remove(bullet);
+                    playerBullets.splice(i, 1);
+                    if (enemy.health <= 0) {
+                        scene.remove(enemy.mesh);
+                        scene.remove(enemy.gun);
+                        if (enemy.isLeader) {
+                            alert(`${enemy.color === 0xFF0000 ? 'Red' : 'Blue'} leader has been defeated!`);
+                        }
+                        const index = enemySoldiers.indexOf(enemy);
+                        if (index > -1) {
+                            enemySoldiers.splice(index, 1);
+                        }
+                        createExplosion(enemy.position);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // Update and render fireworks
+    for (let i = fireworks.length - 1; i >= 0; i--) {
+        const firework = fireworks[i];
+        firework.update();
+        if (firework.exploded && firework.particles[0].scale.x < 0.01) {
+            for (let particle of firework.particles) {
+                scene.remove(particle);
+            }
+            fireworks.splice(i, 1);
+        }
+    }
+
+    // Randomly launch new fireworks
+    if (Math.random() < 0.05) {
+        launchFirework();
+    }
+
+    renderer.render(scene, camera);
+}
+
+// Handle window resize
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+</script>
+</body></html>
