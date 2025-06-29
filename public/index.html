@@ -146,6 +146,7 @@
             <option value="html-only">HTML Only</option>
             <option value="flask">Flask</option>
             <option value="pygame">Pygame</option>
+            <option value="pyqt5">PyQt5</option>
         </select>
     <div class="image-option-select">
         <label for="edit-image-option">Image Option for Edit:</label>
@@ -200,7 +201,7 @@
             const mode = document.getElementById('script-mode').value;
             const htmlOption = document.getElementById('html-file-option-container');
             const editHtmlOption = document.getElementById('edit-html-file-option-container');
-            if (mode === 'pygame') {
+            if (mode === 'pygame' || mode === 'pyqt5') {
                 htmlOption.style.display = 'none';
                 editHtmlOption.style.display = 'none';
             } else {
