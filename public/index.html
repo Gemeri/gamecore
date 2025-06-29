@@ -141,7 +141,7 @@
     </div>
     <div class="script-mode-select">
         <label for="script-mode">Select Script Mode:</label>
-        <select id="script-mode">
+        <select id="script-mode" onchange="toggleScriptMode()">
             <option value="html-js-css">HTML, JS, CSS</option>
             <option value="html-only">HTML Only</option>
             <option value="flask">Flask</option>
@@ -155,7 +155,7 @@
             <option value="exclude">Exclude Images</option>
         </select>
     </div>
-    <div class="html-file-option-select">
+    <div class="html-file-option-select" id="html-file-option-container">
         <label for="html-file-option">HTML File Option:</label>
         <select id="html-file-option" onchange="toggleHtmlCount('html-file-option','html-file-count')">
             <option value="single">Single HTML</option>
@@ -164,7 +164,7 @@
         </select>
         <input type="number" id="html-file-count" min="2" value="2" style="display:none;" placeholder="Number of pages">
     </div>
-    <div class="html-file-option-select">
+    <div class="html-file-option-select" id="edit-html-file-option-container">
         <label for="edit-html-file-option">HTML File Option for Edit:</label>
         <select id="edit-html-file-option" onchange="toggleHtmlCount('edit-html-file-option','edit-html-file-count')">
             <option value="single">Single HTML</option>
@@ -193,6 +193,19 @@
                 input.style.display = 'inline-block';
             } else {
                 input.style.display = 'none';
+            }
+        }
+
+        function toggleScriptMode() {
+            const mode = document.getElementById('script-mode').value;
+            const htmlOption = document.getElementById('html-file-option-container');
+            const editHtmlOption = document.getElementById('edit-html-file-option-container');
+            if (mode === 'pygame') {
+                htmlOption.style.display = 'none';
+                editHtmlOption.style.display = 'none';
+            } else {
+                htmlOption.style.display = 'block';
+                editHtmlOption.style.display = 'block';
             }
         }
 
@@ -561,6 +574,7 @@ async function continueCodeGeneration() {
             }
         });
         loadGeneratedScripts();
+        toggleScriptMode();
         toggleHtmlCount('html-file-option','html-file-count');
         toggleHtmlCount('edit-html-file-option','edit-html-file-count');
     </script>

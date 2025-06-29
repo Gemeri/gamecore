@@ -1197,10 +1197,12 @@ if (imageOption === 'include') {
     basePrompt += ` Use image placeholder [IMAGE:description] where images should be placed ONLY if images are needed. If you're adding new images, do not put image placeholders over where images are already refrenced in the code. for example, if you're trying to modify a html code to add more images for new items on the menu, but some images already exist and are refrenced on the menu html code, such as image_html1_1.png or image_html_1.png, then leave those alone AND DONT MODIFY THEM IN ANY WAY but add image placeholder for the new items. DO NOT PUT PLACEHOLDERS OVER PRE-EXISTING REFRENCED IMAGE AND DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description] AND ONLY IF NECESSARY`;
 }
 
-if (htmlFileOption === 'multiple') {
-    basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. You can create up to ${htmlPageCount} HTML files in total.`;
-} else if (htmlFileOption === 'multiple-ai') {
-    basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. Generate as many HTML files as necessary.`;
+if (scriptMode !== 'pygame') {
+    if (htmlFileOption === 'multiple') {
+        basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. You can create up to ${htmlPageCount} HTML files in total.`;
+    } else if (htmlFileOption === 'multiple-ai') {
+        basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. Generate as many HTML files as necessary.`;
+    }
 }
 
     if (uploadedFiles.length > 0) {
@@ -1233,7 +1235,7 @@ if (htmlFileOption === 'multiple') {
     }
 
     basePrompt += `. Make sure to wrap each code section in appropriate markdown code blocks (e.g., \`\`\`html, \`\`\`css, \`\`\`javascript). `
-    if(htmlFileOption !== 'single'){
+    if(scriptMode !== 'pygame' && htmlFileOption !== 'single'){
         basePrompt += `For HTML files, include the filename as a comment at the start of the code block, like this:
 \`\`\`html
 // index.html
