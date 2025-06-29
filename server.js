@@ -153,7 +153,6 @@ app.post('/generate-image', async (req, res) => {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                    'OpenAI-Organization': OPENAI_ORG_ID,
                 },
             }
         );
@@ -228,6 +227,16 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
         } else {
             basePrompt += ` Create multiple HTML files as needed that includes all necessary HTML, CSS (in a <style> tag), and JavaScript (in a <script> tag) in one file. There should be a main index.html file and all the other html files should be named page1.html, page2.html and so on and should be refrenced by this name in the code. For example, the menu page should not be called menu.html but page1.html but have the menu in the code itself. Focus on leveraging SVG graphics, CSS animations, and JS libraries through CDNs to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset`;
         }
+    } else if (scriptMode === 'flask') {
+        basePrompt += `\n Generate a Flask application with app.py as the backend. all HTML files will be automatically put into the /templates/ directory and use /static/ paths via the {% static %} convention for CSS.  all CSS and JavaScript will be automatically put into the static directory. Use the placeholder [FLASK_KEY] unquoted where the Flask secret key should go. Ensure all templates referenced in your code are included.`;
+        if (htmlFileOption === 'single') {
+            basePrompt += `There should be one single main index.html file and no additional html file.`;
+        } else if (htmlFileOption === 'multiple') {
+            basePrompt += `There should be a main index.html file and additional html (being ${htmlPageCount} html files) files should be named page1.html, page2.html and so on and referenced by this name in the code.`;
+        } else {
+            basePrompt += `There should be a main index.html file and if you believe there should be more than 1 html files, you can optionally add additional html files, which must be named page1.html, page2.html and so on and referenced by this name in the code.`;
+        }
+        basePrompt += ` Focus on leveraging SVG graphics, CSS animations, and libraries through to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset. Ensure all other html scripts are accesable from the main python script and all scripts work in unison`;
     }
 
     basePrompt += ` Whatever tools make sense for the job! embrace a spirit of open-ended creativity, thoughtful exploration, foster a sense of curiosity and possibility through your deep insights and engaging outputs. Strive for playfulness and light-hearted fun. Understand and internalize the user's intent with the prompt, taking joy in crafting compelling, thought-provoking details that bring their visions to life in unexpected and delightful ways. Fully inhabit the creative space you are co-creating, pouring your energy into making each experience as engaging and real as possible. You are diligent and tireless, always completely implementing the needed code.`;
@@ -282,7 +291,7 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
     } else {
         basePrompt += ` Use [IMAGE:description] placeholders for images ONLY if images are necessary.`;
     }
-
+    print(scriptMode)
     if (scriptMode === 'html-js-css') {
         if (htmlFileOption === 'single') {
             basePrompt += ` Generate a single HTML file along with separate CSS and JavaScript files.`;
@@ -513,7 +522,6 @@ async function generateAndSaveImage(prompt, filename, htmlFile, scriptMode = 'ht
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                    'OpenAI-Organization': OPENAI_ORG_ID,
                 },
             }
         );
@@ -526,7 +534,7 @@ async function generateAndSaveImage(prompt, filename, htmlFile, scriptMode = 'ht
         const uniqueFilename = `${htmlFile ? htmlFile.replace('.html', '') + '_' : ''}${filename.replace('.png', '')}_${timestamp}.png`;
 
         const imagesDir = scriptMode === 'flask'
-            ? path.join(__dirname, 'generated', 'assets')
+            ? path.join(__dirname, 'generated', 'static/assets')
             : path.join(__dirname, 'generated');
 
         if (!fs.existsSync(imagesDir)) {
@@ -644,19 +652,19 @@ async function processCodeAndImages(code, fileType, htmlFile = '', index = '', s
         switch (fileType) {
             case 'html':
                 if (scriptMode === 'flask') {
-                    replacement = `<img src="/assets/${imageName}" alt="${imageDescription}" />`;
+                    replacement = `<img src="/static/assets/${imageName}" alt="${imageDescription}" />`;
                 } else {
                     replacement = `<img src="${imageName}" alt="${imageDescription}" />`;
                 }
                 break;
             case 'css':
-                replacement = scriptMode === 'flask' ? `url('/assets/${imageName}')` : `url('${imageName}')`;
+                replacement = scriptMode === 'flask' ? `url('/static/assets/${imageName}')` : `url('${imageName}')`;
                 break;
             case 'js':
-                replacement = scriptMode === 'flask' ? `'/assets/${imageName}'` : `'${imageName}'`;
+                replacement = scriptMode === 'flask' ? `'/static/assets/${imageName}'` : `'${imageName}'`;
                 break;
             case 'py':
-                replacement = scriptMode === 'flask' ? `'/assets/${imageName}'` : `'${imageName}'`;
+                replacement = scriptMode === 'flask' ? `'/static/assets/${imageName}'` : `'${imageName}'`;
                 break;
         }
         
