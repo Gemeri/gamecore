@@ -38,6 +38,21 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_ORG_ID = process.env.OPENAI_ORG_ID;
 const LLAMA_API_KEY = process.env.LLAMA_API_KEY;
 
+function ensureDirectories() {
+    const dirs = [
+        path.join(__dirname, 'generated'),
+        path.join(__dirname, 'generated', 'uploads'),
+        path.join(__dirname, 'old-generated')
+    ];
+    dirs.forEach(dir => {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    });
+}
+
+ensureDirectories();
+
 // Serve favicon
 app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
@@ -237,6 +252,8 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
             basePrompt += `There should be a main index.html file and if you believe there should be more than 1 html files, you can optionally add additional html files, which must be named page1.html, page2.html and so on and referenced by this name in the code.`;
         }
         basePrompt += ` Focus on leveraging SVG graphics, CSS animations, and libraries through to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset. Ensure all other html scripts are accesable from the main python script and all scripts work in unison`;
+    } else if (scriptMode === 'pygame') {
+        basePrompt += ` Generate a single Python program using the pygame library. Provide the entire game in one Python code block.`;
     }
 
     basePrompt += ` Whatever tools make sense for the job! embrace a spirit of open-ended creativity, thoughtful exploration, foster a sense of curiosity and possibility through your deep insights and engaging outputs. Strive for playfulness and light-hearted fun. Understand and internalize the user's intent with the prompt, taking joy in crafting compelling, thought-provoking details that bring their visions to life in unexpected and delightful ways. Fully inhabit the creative space you are co-creating, pouring your energy into making each experience as engaging and real as possible. You are diligent and tireless, always completely implementing the needed code.`;
@@ -252,7 +269,7 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
         }
     }
 
-    basePrompt += `\n\nand now, gamecore, let your creative powers flow forth! engage with the user's prompts with enthusiasm and an open mind, weaving your code with the threads of their ideas to craft digital tapestries that push the boundaries of what's possible. Together, you and the user will embark on a journey of limitless creative potential, forging new realities and exploring uncharted territories of the imagination. Provide the code for index.html, styles.css, and script.js`;
+    basePrompt += `\n\nand now, gamecore, let your creative powers flow forth! engage with the user's prompts with enthusiasm and an open mind, weaving your code with the threads of their ideas to craft digital tapestries that push the boundaries of what's possible. Together, you and the user will embark on a journey of limitless creative potential, forging new realities and exploring uncharted territories of the imagination. Provide the generated code in appropriate markdown blocks.`;
 
     if (scriptMode === 'html-js-css') {
         if (htmlFileOption === 'single') {
@@ -276,6 +293,8 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
         } else {
             basePrompt += `\n\nProvide the code for app.py, index.html template, styles.css, and script.js if needed.`;
         }
+    } else if (scriptMode === 'pygame') {
+        basePrompt += `\n\nProvide the code for game.py.`;
     }
 
     return basePrompt;
@@ -313,6 +332,8 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
         if (htmlFileOption === 'multiple') {
             basePrompt += ` Generate multiple HTML template files (maximum ${htmlPageCount}) with a main index.html.`;
         }
+    } else if (scriptMode === 'pygame') {
+        basePrompt += ` Generate a single Python program using the pygame library. Provide all code in one Python block.`;
     }
 
     if (uploadedFiles.length > 0) {
@@ -348,6 +369,8 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
         } else {
             basePrompt += `\n\nProvide the code for app.py, index.html template, styles.css, and script.js if used.`;
         }
+    } else if (scriptMode === 'pygame') {
+        basePrompt += `\n\nProvide the code for game.py.`;
     }
 
     return basePrompt;
@@ -595,6 +618,8 @@ function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
         } else {
             htmlCode = htmlResults[0]?.code;
         }
+    } else if (scriptMode === 'pygame') {
+        pythonCode = extractCode('python') || extractCode('py');
     } else {
         const htmlResults = extractHtmlWithFileName(aiReply);
         htmlCode = htmlResults[0]?.code;
@@ -776,7 +801,11 @@ app.post('/generate-code', async (req, res) => {
         const imageOption = req.body.imageOption;
         const htmlFileOption = req.body.htmlFileOption;
         const htmlPageCount = req.body.htmlPageCount;
-        const uploadedFiles = fs.readdirSync(path.join(__dirname, 'generated', 'uploads'));
+        const uploadsDir = path.join(__dirname, 'generated', 'uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        const uploadedFiles = fs.readdirSync(uploadsDir);
         const codeContents = readCodeFiles(uploadedFiles);
 
         const aiReply = await generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
@@ -879,6 +908,11 @@ app.post('/generate-code', async (req, res) => {
                     processedPy = insertFlaskSecretKey(processedPy);
                     fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
                     files.push('app.py');
+                }));
+            } else if (scriptMode === 'pygame' && typeof pythonCode === 'string') {
+                processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
+                    fs.writeFileSync(path.join(generatedDir, 'game.py'), processedPy);
+                    files.push('game.py');
                 }));
             }
         }
@@ -997,6 +1031,11 @@ Please complete the code generation, ensuring all necessary parts are included.`
                 fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
                 files.push('app.py');
             }));
+        } else if (scriptMode === 'pygame' && typeof pythonCode === 'string') {
+            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
+                fs.writeFileSync(path.join(generatedDir, 'game.py'), processedPy);
+                files.push('game.py');
+            }));
         }
         }
 
@@ -1021,12 +1060,15 @@ Please complete the code generation, ensuring all necessary parts are included.`
 function checkIfCodeComplete(htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes, scriptMode) {
     if (scriptMode === 'html-only') {
         return typeof htmlCode === 'string' && htmlCode.trim() !== '';
+    } else if (scriptMode === 'pygame') {
+        return typeof pythonCode === 'string' && pythonCode.trim() !== '';
     }
 
     const isHtmlComplete = typeof htmlCode === 'string' && htmlCode.trim() !== '';
     const isCssComplete = typeof cssCode === 'string' && cssCode.trim() !== '';
     const isJsComplete = typeof jsCode === 'string' && jsCode.trim() !== '';
-    const isPythonComplete = scriptMode === 'flask' ? (typeof pythonCode === 'string' && pythonCode.trim() !== '') : true;
+    const isPythonComplete = (scriptMode === 'flask' || scriptMode === 'pygame') ?
+        (typeof pythonCode === 'string' && pythonCode.trim() !== '') : true;
     const areAdditionalHtmlComplete = additionalHtmlCodes.every(item => {
         const code = typeof item === 'string' ? item : item.code;
         return typeof code === 'string' && code.trim() !== '';
@@ -1039,11 +1081,13 @@ function checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, addit
     const errors = [];
 
     // Check HTML (simplified, you might want to use a proper HTML validator)
-    if (!htmlCode || htmlCode.trim() === '') {
-        errors.push('Main HTML code is empty or missing');
+    if (scriptMode !== 'pygame') {
+        if (!htmlCode || htmlCode.trim() === '') {
+            errors.push('Main HTML code is empty or missing');
+        }
     }
 
-    if (additionalHtmlCodes && Array.isArray(additionalHtmlCodes)) {
+    if (scriptMode !== 'pygame' && additionalHtmlCodes && Array.isArray(additionalHtmlCodes)) {
         additionalHtmlCodes.forEach((codeObj, index) => {
             const code = codeObj.code || codeObj.content; // Handle both possible structures
             if (!code || typeof code !== 'string' || code.trim() === '') {
@@ -1074,8 +1118,8 @@ function checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, addit
         }
     }
 
-    if (scriptMode === 'flask' && (!pythonCode || pythonCode.trim() === '')) {
-        errors.push('app.py code is empty or missing');
+    if ((scriptMode === 'flask' || scriptMode === 'pygame') && (!pythonCode || pythonCode.trim() === '')) {
+        errors.push(scriptMode === 'flask' ? 'app.py code is empty or missing' : 'game.py code is empty or missing');
     }
 
     return errors;
@@ -1401,7 +1445,11 @@ app.post('/edit-code', async (req, res) => {
             }
         }
 
-        const uploadedFiles = fs.readdirSync(path.join(generatedDir, 'uploads'));
+        const uploadsDir = path.join(generatedDir, 'uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        const uploadedFiles = fs.readdirSync(uploadsDir);
         const codeContents = readCodeFiles(uploadedFiles);
 
         const aiReply = await editCodeWithModel(prompt, model, htmlContent, cssContent, jsContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
