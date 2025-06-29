@@ -5,3 +5,4 @@ an AI game creator
 
 - Automatically creates required directories (`generated`, `generated/uploads`, and `old-generated`) if they do not exist.
 - Added **Pygame** option to the script mode selector. When selected, the AI produces a single `game.py` file using the pygame library.
+- Added **PyQt5** option to the script mode selector. When selected, the AI generates a single `app.py` file using the PyQt5 framework.

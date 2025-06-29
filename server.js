@@ -254,6 +254,8 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
         basePrompt += ` Focus on leveraging SVG graphics, CSS animations, and libraries through to create dynamic, visually stunning, interactive experiences, but making sure that the UI works well and doesnt stay after the game is reset. Ensure all other html scripts are accesable from the main python script and all scripts work in unison`;
     } else if (scriptMode === 'pygame') {
         basePrompt += ` Generate a single Python program using the pygame library. Provide the entire game in one Python code block.`;
+    } else if (scriptMode === 'pyqt5') {
+        basePrompt += ` Generate a desktop application using the PyQt5 framework. Provide the entire application in one Python code block.`;
     }
 
     basePrompt += ` Whatever tools make sense for the job! embrace a spirit of open-ended creativity, thoughtful exploration, foster a sense of curiosity and possibility through your deep insights and engaging outputs. Strive for playfulness and light-hearted fun. Understand and internalize the user's intent with the prompt, taking joy in crafting compelling, thought-provoking details that bring their visions to life in unexpected and delightful ways. Fully inhabit the creative space you are co-creating, pouring your energy into making each experience as engaging and real as possible. You are diligent and tireless, always completely implementing the needed code.`;
@@ -295,6 +297,8 @@ function generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOp
         }
     } else if (scriptMode === 'pygame') {
         basePrompt += `\n\nProvide the code for game.py.`;
+    } else if (scriptMode === 'pyqt5') {
+        basePrompt += `\n\nProvide the code for app.py.`;
     }
 
     return basePrompt;
@@ -334,6 +338,8 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
         }
     } else if (scriptMode === 'pygame') {
         basePrompt += ` Generate a single Python program using the pygame library. Provide all code in one Python block.`;
+    } else if (scriptMode === 'pyqt5') {
+        basePrompt += ` Generate a desktop application using the PyQt5 framework. Provide all code in one Python block.`;
     }
 
     if (uploadedFiles.length > 0) {
@@ -371,6 +377,8 @@ function generateLlamaPrompt(prompt, uploadedFiles, codeContents, scriptMode, im
         }
     } else if (scriptMode === 'pygame') {
         basePrompt += `\n\nProvide the code for game.py.`;
+    } else if (scriptMode === 'pyqt5') {
+        basePrompt += `\n\nProvide the code for app.py.`;
     }
 
     return basePrompt;
@@ -618,7 +626,7 @@ function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
         } else {
             htmlCode = htmlResults[0]?.code;
         }
-    } else if (scriptMode === 'pygame') {
+    } else if (scriptMode === 'pygame' || scriptMode === 'pyqt5') {
         pythonCode = extractCode('python') || extractCode('py');
     } else {
         const htmlResults = extractHtmlWithFileName(aiReply);
@@ -914,6 +922,11 @@ app.post('/generate-code', async (req, res) => {
                     fs.writeFileSync(path.join(generatedDir, 'game.py'), processedPy);
                     files.push('game.py');
                 }));
+            } else if (scriptMode === 'pyqt5' && typeof pythonCode === 'string') {
+                processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
+                    fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
+                    files.push('app.py');
+                }));
             }
         }
 
@@ -1036,6 +1049,11 @@ Please complete the code generation, ensuring all necessary parts are included.`
                 fs.writeFileSync(path.join(generatedDir, 'game.py'), processedPy);
                 files.push('game.py');
             }));
+        } else if (scriptMode === 'pyqt5' && typeof pythonCode === 'string') {
+            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
+                fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
+                files.push('app.py');
+            }));
         }
         }
 
@@ -1060,14 +1078,14 @@ Please complete the code generation, ensuring all necessary parts are included.`
 function checkIfCodeComplete(htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes, scriptMode) {
     if (scriptMode === 'html-only') {
         return typeof htmlCode === 'string' && htmlCode.trim() !== '';
-    } else if (scriptMode === 'pygame') {
+    } else if (scriptMode === 'pygame' || scriptMode === 'pyqt5') {
         return typeof pythonCode === 'string' && pythonCode.trim() !== '';
     }
 
     const isHtmlComplete = typeof htmlCode === 'string' && htmlCode.trim() !== '';
     const isCssComplete = typeof cssCode === 'string' && cssCode.trim() !== '';
     const isJsComplete = typeof jsCode === 'string' && jsCode.trim() !== '';
-    const isPythonComplete = (scriptMode === 'flask' || scriptMode === 'pygame') ?
+    const isPythonComplete = (scriptMode === 'flask' || scriptMode === 'pygame' || scriptMode === 'pyqt5') ?
         (typeof pythonCode === 'string' && pythonCode.trim() !== '') : true;
     const areAdditionalHtmlComplete = additionalHtmlCodes.every(item => {
         const code = typeof item === 'string' ? item : item.code;
@@ -1081,13 +1099,13 @@ function checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, addit
     const errors = [];
 
     // Check HTML (simplified, you might want to use a proper HTML validator)
-    if (scriptMode !== 'pygame') {
+    if (scriptMode !== 'pygame' && scriptMode !== 'pyqt5') {
         if (!htmlCode || htmlCode.trim() === '') {
             errors.push('Main HTML code is empty or missing');
         }
     }
 
-    if (scriptMode !== 'pygame' && additionalHtmlCodes && Array.isArray(additionalHtmlCodes)) {
+    if (scriptMode !== 'pygame' && scriptMode !== 'pyqt5' && additionalHtmlCodes && Array.isArray(additionalHtmlCodes)) {
         additionalHtmlCodes.forEach((codeObj, index) => {
             const code = codeObj.code || codeObj.content; // Handle both possible structures
             if (!code || typeof code !== 'string' || code.trim() === '') {
@@ -1118,8 +1136,10 @@ function checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, addit
         }
     }
 
-    if ((scriptMode === 'flask' || scriptMode === 'pygame') && (!pythonCode || pythonCode.trim() === '')) {
-        errors.push(scriptMode === 'flask' ? 'app.py code is empty or missing' : 'game.py code is empty or missing');
+    if ((scriptMode === 'flask' || scriptMode === 'pygame' || scriptMode === 'pyqt5') && (!pythonCode || pythonCode.trim() === '')) {
+        let fileName = 'app.py';
+        if (scriptMode === 'pygame') fileName = 'game.py';
+        errors.push(`${fileName} code is empty or missing`);
     }
 
     return errors;
@@ -1197,7 +1217,7 @@ if (imageOption === 'include') {
     basePrompt += ` Use image placeholder [IMAGE:description] where images should be placed ONLY if images are needed. If you're adding new images, do not put image placeholders over where images are already refrenced in the code. for example, if you're trying to modify a html code to add more images for new items on the menu, but some images already exist and are refrenced on the menu html code, such as image_html1_1.png or image_html_1.png, then leave those alone AND DONT MODIFY THEM IN ANY WAY but add image placeholder for the new items. DO NOT PUT PLACEHOLDERS OVER PRE-EXISTING REFRENCED IMAGE AND DO NOT USE ANY OTHER PLACEHOLDER AND DO NOT REFRENCE OTHER IMAGES, ONLY USE [IMAGE:description] AND ONLY IF NECESSARY`;
 }
 
-if (scriptMode !== 'pygame') {
+if (scriptMode !== 'pygame' && scriptMode !== 'pyqt5') {
     if (htmlFileOption === 'multiple') {
         basePrompt += ` Ensure that you maintain or create links between the HTML files as needed. You can create up to ${htmlPageCount} HTML files in total.`;
     } else if (htmlFileOption === 'multiple-ai') {
@@ -1235,7 +1255,7 @@ if (scriptMode !== 'pygame') {
     }
 
     basePrompt += `. Make sure to wrap each code section in appropriate markdown code blocks (e.g., \`\`\`html, \`\`\`css, \`\`\`javascript). `
-    if(scriptMode !== 'pygame' && htmlFileOption !== 'single'){
+    if(scriptMode !== 'pygame' && scriptMode !== 'pyqt5' && htmlFileOption !== 'single'){
         basePrompt += `For HTML files, include the filename as a comment at the start of the code block, like this:
 \`\`\`html
 // index.html
@@ -1527,6 +1547,16 @@ app.post('/edit-code', async (req, res) => {
         if (scriptMode === 'flask' && typeof pythonCode === 'string') {
             processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
                 processedPy = insertFlaskSecretKey(processedPy);
+                fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
+                files.push('app.py');
+            }));
+        } else if (scriptMode === 'pygame' && typeof pythonCode === 'string') {
+            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
+                fs.writeFileSync(path.join(generatedDir, 'game.py'), processedPy);
+                files.push('game.py');
+            }));
+        } else if (scriptMode === 'pyqt5' && typeof pythonCode === 'string') {
+            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
                 fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
                 files.push('app.py');
             }));
