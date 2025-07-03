@@ -633,7 +633,11 @@ function extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption) {
     let htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes = [];
 
     const extractCode = (language) => {
-        const regex = new RegExp(`\`\`\`\s*${language}\s*([\\s\\S]*?)\`\`\``, 'i');
+        const regex = new RegExp(
+        '```\\s*' + (language === 'python' ? '(?:python|py)' : language) +
+        '\\s*([\\s\\S]*?)```',
+        'i'
+        );
         const match = aiReply.match(regex);
         return match ? match[1].trim() : null;
     };
@@ -764,9 +768,19 @@ function gatherProjectInfo() {
     const files = [];
     function walk(dir, rel = '') {
         fs.readdirSync(dir).forEach(f => {
-            if (f === 'uploads') return;
-            const full = path.join(dir, f);
-            const relative = path.join(rel, f);
+            // skip folders / files that are never meant to be read as text
+            if (
+                f === 'uploads'               ||  // user-uploaded assets
+                f === '__pycache__'           ||  // Python byte-code dir
+                f.endsWith('.pyc')            ||  // compiled byte-code file
+                f.endsWith('.png')            ||  // generated images
+                f.endsWith('.jpg')            ||
+                f.endsWith('.jpeg')
+            ) return;
+
+            const full      = path.join(dir, f);
+            const relative  = path.join(rel, f);
+
             if (fs.statSync(full).isDirectory()) {
                 walk(full, relative);
             } else {
@@ -1224,9 +1238,27 @@ Please complete the code generation, ensuring all necessary parts are included.`
         
         lastResponse += aiReply;
         
-        const { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes } = extractCodeFromAIResponse(lastResponse, scriptMode, htmlFileOption);
+        let { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes } =
+        extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
 
-        isCodeComplete = checkIfCodeComplete(htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes, scriptMode);
+        /* fallback – if the patch response didn’t include a full Python block,
+        reuse the file already saved on disk so “code is empty or missing”
+        never triggers spuriously                                                */
+        if (
+        (scriptMode === 'pygame' || scriptMode === 'pyqt5' || scriptMode === 'flask') &&
+        (!pythonCode || pythonCode.trim() === '')
+        ) {
+        const pyFile       = scriptMode === 'pygame' ? 'game.py' : 'app.py';
+        const existingPath = path.join(__dirname, 'generated', pyFile);
+        if (fs.existsSync(existingPath)) {
+            pythonCode = fs.readFileSync(existingPath, 'utf8');
+        }
+        }
+
+        isCodeComplete = checkIfCodeComplete(
+        htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes, scriptMode
+        );
+
 
         const generatedDir = path.join(__dirname, 'generated');
         if (!fs.existsSync(generatedDir)) {
@@ -1395,9 +1427,9 @@ function checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, addit
         }
     }
 
-    if ((scriptMode === 'flask' || scriptMode === 'pygame' || scriptMode === 'pyqt5') && (!pythonCode || pythonCode.trim() === '')) {
-        let fileName = 'app.py';
-        if (scriptMode === 'pygame') fileName = 'game.py';
+    if ((scriptMode === 'flask' || scriptMode === 'pygame' || scriptMode === 'pyqt5') &&
+        (!pythonCode || pythonCode.trim() === '')) {
+        const fileName = scriptMode === 'pygame' ? 'game.py' : 'app.py';
         errors.push(`${fileName} code is empty or missing`);
     } else if (pythonCode && (scriptMode === 'flask' || scriptMode === 'pygame' || scriptMode === 'pyqt5')) {
         try {
@@ -1693,26 +1725,33 @@ app.post('/edit-code', async (req, res) => {
             pending = await retryPendingEdits(pending, model);
         }
 
+        // 1st call – pick the correct Python file
+        const pyFileName = scriptMode === 'pygame' ? 'game.py' : 'app.py';
+
         const errors = checkForErrors(
-            fs.existsSync(path.join(__dirname, 'generated', 'index.html')) ? fs.readFileSync(path.join(__dirname, 'generated', 'index.html'), 'utf8') : '',
-            fs.existsSync(path.join(__dirname, 'generated', 'styles.css')) ? fs.readFileSync(path.join(__dirname, 'generated', 'styles.css'), 'utf8') : '',
-            fs.existsSync(path.join(__dirname, 'generated', 'script.js')) ? fs.readFileSync(path.join(__dirname, 'generated', 'script.js'), 'utf8') : '',
-            fs.existsSync(path.join(__dirname, 'generated', 'app.py')) ? fs.readFileSync(path.join(__dirname, 'generated', 'app.py'), 'utf8') : '',
-            scriptMode,
-            []
+        fs.existsSync(path.join(__dirname, 'generated', 'index.html')) ? fs.readFileSync(path.join(__dirname, 'generated', 'index.html'), 'utf8') : '',
+        fs.existsSync(path.join(__dirname, 'generated', 'styles.css')) ? fs.readFileSync(path.join(__dirname, 'generated', 'styles.css'), 'utf8') : '',
+        fs.existsSync(path.join(__dirname, 'generated', 'script.js'))  ? fs.readFileSync(path.join(__dirname, 'generated', 'script.js'),  'utf8') : '',
+        fs.existsSync(path.join(__dirname, 'generated',  pyFileName))  ? fs.readFileSync(path.join(__dirname, 'generated',  pyFileName),  'utf8') : '',
+        scriptMode,
+        []
         );
+
         if (errors.length > 0) {
             await fixErrorsWithAI(errors, model, scriptMode);
         }
+        // to here
+        const pyFileGame = scriptMode === 'pygame' ? 'game.py' : 'app.py';
 
         const finalErrors = checkForErrors(
-            fs.existsSync(path.join(__dirname, 'generated', 'index.html')) ? fs.readFileSync(path.join(__dirname, 'generated', 'index.html'), 'utf8') : '',
-            fs.existsSync(path.join(__dirname, 'generated', 'styles.css')) ? fs.readFileSync(path.join(__dirname, 'generated', 'styles.css'), 'utf8') : '',
-            fs.existsSync(path.join(__dirname, 'generated', 'script.js')) ? fs.readFileSync(path.join(__dirname, 'generated', 'script.js'), 'utf8') : '',
-            fs.existsSync(path.join(__dirname, 'generated', 'app.py')) ? fs.readFileSync(path.join(__dirname, 'generated', 'app.py'), 'utf8') : '',
-            scriptMode,
-            []
+        fs.existsSync(path.join(__dirname, 'generated', 'index.html')) ? fs.readFileSync(path.join(__dirname, 'generated', 'index.html'), 'utf8') : '',
+        fs.existsSync(path.join(__dirname, 'generated', 'styles.css')) ? fs.readFileSync(path.join(__dirname, 'generated', 'styles.css'), 'utf8') : '',
+        fs.existsSync(path.join(__dirname, 'generated', 'script.js'))  ? fs.readFileSync(path.join(__dirname, 'generated', 'script.js'),  'utf8') : '',
+        fs.existsSync(path.join(__dirname, 'generated',  pyFileGame))  ? fs.readFileSync(path.join(__dirname, 'generated',  pyFileGame),  'utf8') : '',
+        scriptMode,
+        []
         );
+
 
         if (pending.length > 0) {
             res.json({ message: 'Some edits could not be applied', files: modified, pending: pending.map(p => p.old), errors: finalErrors });
