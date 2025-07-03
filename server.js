@@ -5,6 +5,7 @@ const FormData = require('form-data');
 const path = require('path');
 const axios = require('axios');
 const fs = require('fs');
+const { execSync } = require('child_process');
 const { JSDOM } = require('jsdom');
 const jshint = require('jshint');
 const csslint = require('csslint').CSSLint;
@@ -108,9 +109,9 @@ function saveHistory(history) {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
 }
 
-function addHistoryMessage(content) {
+function addHistoryEntry(userPrompt, fullPrompt, aiResponse) {
     const history = loadHistory();
-    history.messages.push({ content });
+    history.messages.push({ userPrompt, fullPrompt, aiResponse });
     saveHistory(history);
     return history.messages;
 }
@@ -118,10 +119,14 @@ function addHistoryMessage(content) {
 function buildHistoryText(history) {
     if (!history || history.length === 0) return '';
     let msgs = [...history];
-    let text = 'Previous requests:\n' + msgs.map((h, i) => `${i + 1}. ${h.content}`).join('\n') + '\n\n';
+    let text = 'Previous requests:\n' + msgs.map((h, i) => {
+        return `${i + 1}. Prompt: ${h.fullPrompt}\n   Response: ${h.aiResponse}`;
+    }).join('\n') + '\n\n';
     while (text.length > 12000 && msgs.length > 1) {
         msgs.shift();
-        text = 'Previous requests:\n' + msgs.map((h, i) => `${i + 1}. ${h.content}`).join('\n') + '\n\n';
+        text = 'Previous requests:\n' + msgs.map((h, i) => {
+            return `${i + 1}. Prompt: ${h.fullPrompt}\n   Response: ${h.aiResponse}`;
+        }).join('\n') + '\n\n';
     }
     if (msgs.length !== history.length) saveHistory({ messages: msgs });
     return text;
@@ -909,9 +914,15 @@ function applyEditsToFiles(edits) {
     info.files.forEach(f => {
         let content = f.content;
         edits.forEach(edit => {
-            const result = replaceWithFallback(content, edit.old, edit.new);
-            if (result !== false) {
-                content = result;
+            const attempt = replaceWithFallback(content, edit.old, edit.new);
+            if (attempt !== false) {
+                const oldFirstLine = edit.old.split('\n')[0];
+                const match = content.match(new RegExp(oldFirstLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+                const indent = match ? (match[0].match(/^\s*/)[0] || '') : '';
+                const newLines = edit.new.split('\n');
+                const baseIndent = newLines[0].match(/^\s*/)[0] || '';
+                const adjusted = newLines.map(l => indent + l.replace(new RegExp('^' + baseIndent), ''));
+                content = replaceWithFallback(content, edit.old, adjusted.join('\n'));
                 modified.add(f.path);
                 edit.applied = true;
             }
@@ -924,7 +935,40 @@ function applyEditsToFiles(edits) {
 }
 
 function generatePatchEditPrompt(prompt, layout, codeText, historyText) {
-    return `${historyText}Here is the current project directory:\n${layout}\n\nCurrent code:\n${codeText}\n\nPlease modify the code according to: "${prompt}". Respond only with pairs of code blocks in the following format:\n\nOLD:\n\`\`\`<language>\n(old code)\n\`\`\`\n\nNEW:\n\`\`\`<language>\n(new code)\n\`\`\`\n\n---`; 
+    return `${historyText}Here is the current project directory:\n${layout}\n\nCurrent code:\n${codeText}\n\nPlease modify the code according to: "${prompt}". Respond only with pairs of code blocks in the following format:\n\nOLD:\n\`\`\`<language>\n(old code)\n\`\`\`\n\nNEW:\n\`\`\`<language>\n(new code)\n\`\`\`\n\n---`;
+}
+
+async function retryPendingEdits(pending, model) {
+    let attempts = 0;
+    let remaining = pending;
+    while (remaining.length > 0 && attempts < 3) {
+        const history = loadHistory().messages;
+        const info = gatherProjectInfo();
+        const pendingText = remaining.map(e => `OLD:\n\`\`\`\n${e.old}\n\`\`\`\nNEW:\n\`\`\`\n${e.new}\n\`\`\``).join('\n\n');
+        const prompt = `The following edits could not be applied. Provide corrected code blocks so they can be applied.\n\n${pendingText}`;
+        const finalPrompt = generatePatchEditPrompt(prompt, info.layout, info.codeText, buildHistoryText(history));
+        const aiReply = await editCodeWithModel(finalPrompt, model);
+        addHistoryEntry('retry edits', finalPrompt, aiReply);
+        const edits = parseEditInstructions(aiReply);
+        const result = applyEditsToFiles(edits);
+        remaining = result.pending;
+        attempts++;
+    }
+    return remaining;
+}
+
+async function fixErrorsWithAI(errors, model, scriptMode) {
+    const history = loadHistory().messages;
+    const info = gatherProjectInfo();
+    const errorText = errors.join('\n');
+    const prompt = `Fix the following errors:\n${errorText}`;
+    const finalPrompt = generatePatchEditPrompt(prompt, info.layout, info.codeText, buildHistoryText(history));
+    const aiReply = await editCodeWithModel(finalPrompt, model);
+    addHistoryEntry('fix errors', finalPrompt, aiReply);
+    const edits = parseEditInstructions(aiReply);
+    let { pending } = applyEditsToFiles(edits);
+    if (pending.length > 0) pending = await retryPendingEdits(pending, model);
+    return pending;
 }
 
 
@@ -946,7 +990,8 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
     } else {
         finalPrompt = generatePrompt(prompt, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
     }
-    console.log(finalPrompt)
+    console.log(finalPrompt);
+    let aiReply;
     if (model === 'claude-3.5') {
         const response = await axios.post(
             'https://api.anthropic.com/v1/messages',
@@ -963,7 +1008,7 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
                 },
             }
         );
-        return response.data.content[0].text;
+        aiReply = response.data.content[0].text;
     } else if (model === 'gpt-4o') {
         const response = await requestWithRetry({
             method: 'post',
@@ -972,8 +1017,8 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
               model: 'o3',
               messages: [{ role: 'system', content: 'You are a helpful assistant.' }, { role: 'user', content: finalPrompt }],
             }});
-            return response.data.choices[0].message.content;
-            } else if (model === 'llama3') {
+        aiReply = response.data.choices[0].message.content;
+    } else if (model === 'llama3') {
         const response = await axios.post(
             'https://api.llama-api.com/chat/completions',
             {
@@ -991,8 +1036,10 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
                 },
             }
         );
-        return response.data.choices[0].message.content;
+        aiReply = response.data.choices[0].message.content;
     }
+
+    return { aiReply, finalPrompt };
 }
 
 function isDirectoryEmptyExceptUploads(directory) {
@@ -1015,7 +1062,6 @@ app.post('/generate-code', async (req, res) => {
         }
         clearGeneratedFolder();
         const prompt = req.body.prompt;
-        saveHistory({ messages: [{ content: prompt }] });
         const model = req.body.model;
         const scriptMode = req.body.scriptMode;
         const imageOption = req.body.imageOption;
@@ -1028,9 +1074,10 @@ app.post('/generate-code', async (req, res) => {
         const uploadedFiles = fs.readdirSync(uploadsDir);
         const codeContents = readCodeFiles(uploadedFiles);
 
-        const aiReply = await generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
+        const { aiReply, finalPrompt } = await generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
         console.log("response: " + aiReply);
         console.log("type is : " + typeof aiReply);
+        addHistoryEntry(prompt, finalPrompt, aiReply);
 
         lastPrompt = prompt;
         lastResponse = aiReply;
@@ -1352,6 +1399,15 @@ function checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, addit
         let fileName = 'app.py';
         if (scriptMode === 'pygame') fileName = 'game.py';
         errors.push(`${fileName} code is empty or missing`);
+    } else if (pythonCode && (scriptMode === 'flask' || scriptMode === 'pygame' || scriptMode === 'pyqt5')) {
+        try {
+            const tmpPath = path.join(__dirname, 'generated', '__tmp_check__.py');
+            fs.writeFileSync(tmpPath, pythonCode);
+            execSync(`python -m py_compile ${tmpPath}`);
+            fs.unlinkSync(tmpPath);
+        } catch (e) {
+            errors.push('Python Error: ' + (e.stderr ? e.stderr.toString() : e.message));
+        }
     }
 
     return errors;
@@ -1624,14 +1680,18 @@ app.post('/edit-code', async (req, res) => {
         const prompt = req.body.prompt;
         const model = req.body.model;
         const scriptMode = req.body.scriptMode;
-        const history = addHistoryMessage(prompt);
+        const history = loadHistory().messages;
         const info = gatherProjectInfo();
         const finalPrompt = generatePatchEditPrompt(prompt, info.layout, info.codeText, buildHistoryText(history));
 
         const aiReply = await editCodeWithModel(finalPrompt, model);
         console.log('response: ' + aiReply);
+        addHistoryEntry(prompt, finalPrompt, aiReply);
         const edits = parseEditInstructions(aiReply);
-        const { modified, pending } = applyEditsToFiles(edits);
+        let { modified, pending } = applyEditsToFiles(edits);
+        if (pending.length > 0) {
+            pending = await retryPendingEdits(pending, model);
+        }
 
         const errors = checkForErrors(
             fs.existsSync(path.join(__dirname, 'generated', 'index.html')) ? fs.readFileSync(path.join(__dirname, 'generated', 'index.html'), 'utf8') : '',
@@ -1641,11 +1701,23 @@ app.post('/edit-code', async (req, res) => {
             scriptMode,
             []
         );
+        if (errors.length > 0) {
+            await fixErrorsWithAI(errors, model, scriptMode);
+        }
+
+        const finalErrors = checkForErrors(
+            fs.existsSync(path.join(__dirname, 'generated', 'index.html')) ? fs.readFileSync(path.join(__dirname, 'generated', 'index.html'), 'utf8') : '',
+            fs.existsSync(path.join(__dirname, 'generated', 'styles.css')) ? fs.readFileSync(path.join(__dirname, 'generated', 'styles.css'), 'utf8') : '',
+            fs.existsSync(path.join(__dirname, 'generated', 'script.js')) ? fs.readFileSync(path.join(__dirname, 'generated', 'script.js'), 'utf8') : '',
+            fs.existsSync(path.join(__dirname, 'generated', 'app.py')) ? fs.readFileSync(path.join(__dirname, 'generated', 'app.py'), 'utf8') : '',
+            scriptMode,
+            []
+        );
 
         if (pending.length > 0) {
-            res.json({ message: 'Some edits could not be applied', files: modified, pending: pending.map(p => p.old) });
-        } else if (errors.length > 0) {
-            res.json({ message: 'Code updated with errors', files: modified, errors });
+            res.json({ message: 'Some edits could not be applied', files: modified, pending: pending.map(p => p.old), errors: finalErrors });
+        } else if (finalErrors.length > 0) {
+            res.json({ message: 'Code updated with errors', files: modified, errors: finalErrors });
         } else {
             res.json({ message: 'Code updated successfully', files: modified });
         }
