@@ -8,6 +8,7 @@ const fs = require('fs');
 const { JSDOM } = require('jsdom');
 const jshint = require('jshint');
 const csslint = require('csslint').CSSLint;
+const stringSimilarity = require('string-similarity');
 require('dotenv').config();
 
 //to do: html selection option
@@ -49,6 +50,10 @@ function ensureDirectories() {
             fs.mkdirSync(dir, { recursive: true });
         }
     });
+    const historyFile = path.join(__dirname, 'conversationHistory.json');
+    if (!fs.existsSync(historyFile)) {
+        fs.writeFileSync(historyFile, JSON.stringify({ messages: [] }, null, 2));
+    }
 }
 
 ensureDirectories();
@@ -88,6 +93,39 @@ const axiosInstance = axios.create({
     }
     throw new Error('Max retries exceeded');
   };
+
+const HISTORY_FILE = path.join(__dirname, 'conversationHistory.json');
+
+function loadHistory() {
+    try {
+        return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    } catch {
+        return { messages: [] };
+    }
+}
+
+function saveHistory(history) {
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+}
+
+function addHistoryMessage(content) {
+    const history = loadHistory();
+    history.messages.push({ content });
+    saveHistory(history);
+    return history.messages;
+}
+
+function buildHistoryText(history) {
+    if (!history || history.length === 0) return '';
+    let msgs = [...history];
+    let text = 'Previous requests:\n' + msgs.map((h, i) => `${i + 1}. ${h.content}`).join('\n') + '\n\n';
+    while (text.length > 12000 && msgs.length > 1) {
+        msgs.shift();
+        text = 'Previous requests:\n' + msgs.map((h, i) => `${i + 1}. ${h.content}`).join('\n') + '\n\n';
+    }
+    if (msgs.length !== history.length) saveHistory({ messages: msgs });
+    return text;
+}
 
 // Handle POST requests to /chat
 app.post('/chat', upload.single('image'), async (req, res) => {
@@ -716,6 +754,179 @@ async function processCodeAndImages(code, fileType, htmlFile = '', index = '', s
     return updatedCode;
 }
 
+function gatherProjectInfo() {
+    const generatedDir = path.join(__dirname, 'generated');
+    const files = [];
+    function walk(dir, rel = '') {
+        fs.readdirSync(dir).forEach(f => {
+            if (f === 'uploads') return;
+            const full = path.join(dir, f);
+            const relative = path.join(rel, f);
+            if (fs.statSync(full).isDirectory()) {
+                walk(full, relative);
+            } else {
+                files.push({ path: relative, content: fs.readFileSync(full, 'utf8') });
+            }
+        });
+    }
+    walk(generatedDir);
+    const layout = files.map(f => `- ${f.path}`).join('\n');
+    const codeText = files.map(f => `File: ${f.path}\n${f.content}`).join('\n\n');
+    return { layout, codeText, files };
+}
+
+function parseEditInstructions(text) {
+    const regex = /OLD:\s*```(?:[\w]+)?\n([\s\S]*?)```[\s\S]*?NEW:\s*```(?:[\w]+)?\n([\s\S]*?)```/gi;
+    const edits = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        edits.push({ old: match[1].trim(), new: match[2].trim() });
+    }
+    return edits;
+}
+
+function normalizeWhitespace(str) {
+    return str.replace(/\s+/g, ' ').trim();
+}
+
+function replaceWithFallback(content, target, replacement) {
+    const rawParas = content.split(/\n\s*\n/);
+    const targetNorm = normalizeWhitespace(target);
+    const writeBlock = (i, span) => {
+        const before = rawParas.slice(0, i).join('\n\n');
+        const after = rawParas.slice(i + span).join('\n\n');
+        return before + (before ? '\n\n' : '') + replacement + (after ? '\n\n' + after : '');
+    };
+
+    for (let i = 0; i < rawParas.length; i++) {
+        const idx = rawParas[i].indexOf(target);
+        if (idx !== -1) return writeBlock(i, 1);
+    }
+
+    const parts = target.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+    if (parts.length > 1) {
+        for (let i = 0; i <= rawParas.length - parts.length; i++) {
+            if (parts.every((p, j) => normalizeWhitespace(rawParas[i + j]).includes(normalizeWhitespace(p))))
+                return writeBlock(i, parts.length);
+        }
+    }
+
+    for (let i = 0; i < rawParas.length; i++) {
+        if (normalizeWhitespace(rawParas[i]).includes(targetNorm))
+            return writeBlock(i, 1);
+    }
+
+    const firstSentence = (target.split('.')[0] + '.').trim();
+    const firstNorm = normalizeWhitespace(firstSentence).toLowerCase();
+    for (let i = 0; i < rawParas.length; i++) {
+        if (normalizeWhitespace(rawParas[i]).toLowerCase().includes(firstNorm))
+            return writeBlock(i, 1);
+    }
+
+    for (let size = 2; size <= 5 && size <= rawParas.length; size++) {
+        for (let i = 0; i <= rawParas.length - size; i++) {
+            const slice = rawParas.slice(i, i + size);
+            const blockA = normalizeWhitespace(slice.join(' '));
+            const blockB = normalizeWhitespace(slice.join(''));
+            if (blockA.includes(targetNorm) || blockB.includes(targetNorm))
+                return writeBlock(i, size);
+        }
+    }
+
+    let best = { score: 0, idx: -1 };
+    rawParas.forEach((p, i) => {
+        const s = stringSimilarity.compareTwoStrings(normalizeWhitespace(p), targetNorm);
+        if (s > best.score) best = { score: s, idx: i };
+    });
+    if (best.score >= 0.75) return writeBlock(best.idx, 1);
+
+    const stripNums = s => normalizeWhitespace(s).replace(/[\d%]+|\(\d+\)/g, '');
+    best = { score: 0, idx: -1 };
+    rawParas.forEach((p, i) => {
+        const s = stringSimilarity.compareTwoStrings(stripNums(p), stripNums(target));
+        if (s > best.score) best = { score: s, idx: i };
+    });
+    if (best.score >= 0.75) return writeBlock(best.idx, 1);
+
+    const stop = new Set('the a an and or of in to with for on at by as is are was were be been if this that'.split(' '));
+    const tok = str => normalizeWhitespace(str).split(/\W+/).map(w => w.toLowerCase()).filter(w => w && !stop.has(w));
+    const tgtSet = new Set(tok(target));
+    const windowCap = Math.min(12, rawParas.length);
+    for (let size = 2; size <= windowCap; size++) {
+        for (let i = 0; i <= rawParas.length - size; i++) {
+            const winSet = new Set(tok(rawParas.slice(i, i + size).join(' ')));
+            const intersect = [...tgtSet].filter(x => winSet.has(x)).length;
+            const union = new Set([...tgtSet, ...winSet]).size;
+            const jaccard = union ? intersect / union : 0;
+            if (jaccard >= 0.55) return writeBlock(i, size);
+        }
+    }
+
+    const prefix = target.slice(0, 40);
+    for (let i = 0; i < rawParas.length; i++) {
+        let common = 0;
+        while (common < prefix.length && common < rawParas[i].length && prefix[common] === rawParas[i][common]) common++;
+        if (common >= 30) {
+            let span = 1, len = rawParas[i].length;
+            while (i + span < rawParas.length && len < target.length * 0.9) {
+                len += rawParas[i + span].length;
+                span++;
+            }
+            return writeBlock(i, span);
+        }
+    }
+
+    const stripMarker = s => s.replace(/^\s*[\(\[]?[a-z0-9]{1,3}[\)\]]\s*/i, '');
+    for (let i = 0; i < rawParas.length; i++) {
+        const cmp = normalizeWhitespace(stripMarker(rawParas[i]));
+        if (cmp && targetNorm.includes(cmp)) {
+            let span = 1;
+            const headingLike = p => /^[A-Z][A-Z\s]+$/.test(p) || /:\s*$/.test(p);
+            while (i + span < rawParas.length && !headingLike(rawParas[i + span])) span++;
+            return writeBlock(i, span);
+        }
+    }
+
+    const tgtHeadWords = normalizeWhitespace(target).split(' ').slice(0, 6).join(' ');
+    for (let i = 0; i < rawParas.length; i++) {
+        const isHeading = /^[A-Z0-9].+\s*$/.test(rawParas[i]) && rawParas[i] === rawParas[i].toUpperCase();
+        if (isHeading) {
+            const score = stringSimilarity.compareTwoStrings(normalizeWhitespace(rawParas[i]).toLowerCase(), tgtHeadWords.toLowerCase());
+            if (score >= 0.8) {
+                let span = 1;
+                while (i + span < rawParas.length && !( /^[A-Z0-9].+\s*$/.test(rawParas[i + span]) && rawParas[i + span] === rawParas[i + span].toUpperCase() )) span++;
+                return writeBlock(i, span);
+            }
+        }
+    }
+
+    return false;
+}
+
+function applyEditsToFiles(edits) {
+    const info = gatherProjectInfo();
+    const modified = new Set();
+    info.files.forEach(f => {
+        let content = f.content;
+        edits.forEach(edit => {
+            const result = replaceWithFallback(content, edit.old, edit.new);
+            if (result !== false) {
+                content = result;
+                modified.add(f.path);
+                edit.applied = true;
+            }
+        });
+        if (modified.has(f.path)) {
+            fs.writeFileSync(path.join(__dirname, 'generated', f.path), content);
+        }
+    });
+    return { modified: Array.from(modified), pending: edits.filter(e => !e.applied) };
+}
+
+function generatePatchEditPrompt(prompt, layout, codeText, historyText) {
+    return `${historyText}Here is the current project directory:\n${layout}\n\nCurrent code:\n${codeText}\n\nPlease modify the code according to: "${prompt}". Respond only with pairs of code blocks in the following format:\n\nOLD:\n\`\`\`<language>\n(old code)\n\`\`\`\n\nNEW:\n\`\`\`<language>\n(new code)\n\`\`\`\n\n---`; 
+}
+
 
 app.post('/upload-for-code', upload.array('files'), (req, res) => {
     try {
@@ -804,6 +1015,7 @@ app.post('/generate-code', async (req, res) => {
         }
         clearGeneratedFolder();
         const prompt = req.body.prompt;
+        saveHistory({ messages: [{ content: prompt }] });
         const model = req.body.model;
         const scriptMode = req.body.scriptMode;
         const imageOption = req.body.imageOption;
@@ -1355,14 +1567,8 @@ DO NOT MODIFY ANY PRE-EXISTING CODE, FEATURES, OR UI UNLESS SPECIFICALLY ASKED T
 }
 
 
-async function editCodeWithModel(prompt, model, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount) {
-    let finalPrompt;
-    if (model === 'llama3') {
-        finalPrompt = generateLlamaEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
-    } else {
-        finalPrompt = generateEditPrompt(prompt, htmlContent, cssContent, scriptContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
-    }
-    console.log(finalPrompt)
+async function editCodeWithModel(finalPrompt, model) {
+    console.log(finalPrompt);
 
     if (model === 'claude-3.5') {
         const response = await axios.post(
@@ -1418,158 +1624,30 @@ app.post('/edit-code', async (req, res) => {
         const prompt = req.body.prompt;
         const model = req.body.model;
         const scriptMode = req.body.scriptMode;
-        const imageOption = req.body.imageOption;
-        const htmlFileOption = req.body.htmlFileOption;
-        const generatedDir = path.join(__dirname, 'generated');
-        
-        let htmlContent, cssContent, jsContent, additionalHtmlContents = [];
+        const history = addHistoryMessage(prompt);
+        const info = gatherProjectInfo();
+        const finalPrompt = generatePatchEditPrompt(prompt, info.layout, info.codeText, buildHistoryText(history));
 
-        if (scriptMode === 'html-only') {
-            const indexPath = path.join(generatedDir, 'index.html');
-            htmlContent = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
-            if (htmlFileOption === 'multiple') {
-                const files = fs.readdirSync(generatedDir);
-                files.forEach(file => {
-                    if (file.startsWith('page') && file.endsWith('.html')) {
-                        const filePath = path.join(generatedDir, file);
-                        if (fs.existsSync(filePath)) {
-                            additionalHtmlContents.push({
-                                name: file,
-                                content: fs.readFileSync(filePath, 'utf8')
-                            });
-                        }
-                    }
-                });
-            }
+        const aiReply = await editCodeWithModel(finalPrompt, model);
+        console.log('response: ' + aiReply);
+        const edits = parseEditInstructions(aiReply);
+        const { modified, pending } = applyEditsToFiles(edits);
+
+        const errors = checkForErrors(
+            fs.existsSync(path.join(__dirname, 'generated', 'index.html')) ? fs.readFileSync(path.join(__dirname, 'generated', 'index.html'), 'utf8') : '',
+            fs.existsSync(path.join(__dirname, 'generated', 'styles.css')) ? fs.readFileSync(path.join(__dirname, 'generated', 'styles.css'), 'utf8') : '',
+            fs.existsSync(path.join(__dirname, 'generated', 'script.js')) ? fs.readFileSync(path.join(__dirname, 'generated', 'script.js'), 'utf8') : '',
+            fs.existsSync(path.join(__dirname, 'generated', 'app.py')) ? fs.readFileSync(path.join(__dirname, 'generated', 'app.py'), 'utf8') : '',
+            scriptMode,
+            []
+        );
+
+        if (pending.length > 0) {
+            res.json({ message: 'Some edits could not be applied', files: modified, pending: pending.map(p => p.old) });
+        } else if (errors.length > 0) {
+            res.json({ message: 'Code updated with errors', files: modified, errors });
         } else {
-            const indexPath = path.join(generatedDir, 'index.html');
-            const cssPath = path.join(generatedDir, 'styles.css');
-            const jsPath = path.join(generatedDir, 'script.js');
-            
-            htmlContent = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
-            cssContent = fs.existsSync(cssPath) ? fs.readFileSync(cssPath, 'utf8') : '';
-            if (scriptMode === 'html-js-css') {
-                jsContent = fs.existsSync(jsPath) ? fs.readFileSync(jsPath, 'utf8') : '';
-            }
-            if (htmlFileOption === 'multiple') {
-                const files = fs.readdirSync(generatedDir);
-                files.forEach(file => {
-                    if (file.startsWith('page') && file.endsWith('.html')) {
-                        const filePath = path.join(generatedDir, file);
-                        if (fs.existsSync(filePath)) {
-                            additionalHtmlContents.push({
-                                name: file,
-                                content: fs.readFileSync(filePath, 'utf8')
-                            });
-                        }
-                    }
-                });
-            }
-        }
-
-        const uploadsDir = path.join(generatedDir, 'uploads');
-        if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-        const uploadedFiles = fs.readdirSync(uploadsDir);
-        const codeContents = readCodeFiles(uploadedFiles);
-
-        const aiReply = await editCodeWithModel(prompt, model, htmlContent, cssContent, jsContent, additionalHtmlContents, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
-        console.log("response: " + aiReply);
-        
-        const { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
-
-        let files = [];
-        let processPromises = [];
-
-        let templatesDir = generatedDir;
-        let staticDir = generatedDir;
-        if (scriptMode === 'flask') {
-            templatesDir = path.join(generatedDir, 'templates');
-            staticDir = path.join(generatedDir, 'static');
-            if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
-            if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
-        }
-
-        if (scriptMode === 'html-only') {
-            if (htmlCode) {
-                processPromises.push(processCodeAndImages(htmlCode, 'html', 'index.html', '', scriptMode).then(processedHtmlCode => {
-                    fs.writeFileSync(path.join(templatesDir, 'index.html'), processedHtmlCode);
-                    files.push(scriptMode === 'flask' ? path.join('templates','index.html') : 'index.html');
-                }));
-            }
-
-            if (htmlFileOption === 'multiple' && additionalHtmlCodes && additionalHtmlCodes.length > 0) {
-                additionalHtmlCodes.forEach((codeObj, index) => {
-                    if (codeObj && codeObj.code) {
-                        const fileName = codeObj.fileName || `page${index + 1}.html`;
-                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName, '', scriptMode).then(processedCode => {
-                            fs.writeFileSync(path.join(templatesDir, fileName), processedCode);
-                            files.push(scriptMode === 'flask' ? path.join('templates', fileName) : fileName);
-                        }));
-                    }
-                });
-            }
-        } else {
-            if (htmlCode) {
-                processPromises.push(processCodeAndImages(htmlCode, 'html', '', '', scriptMode).then(processedHtmlCode => {
-                    fs.writeFileSync(path.join(templatesDir, 'index.html'), processedHtmlCode);
-                    files.push(scriptMode === 'flask' ? path.join('templates','index.html') : 'index.html');
-                }));
-            }
-
-            if (cssCode) {
-                processPromises.push(processCodeAndImages(cssCode, 'css', '', '', scriptMode).then(processedCssCode => {
-                    fs.writeFileSync(path.join(staticDir, 'styles.css'), processedCssCode);
-                    files.push(scriptMode === 'flask' ? path.join('static','styles.css') : 'styles.css');
-                }));
-            }
-
-            if (scriptMode === 'html-js-css' && jsCode) {
-                processPromises.push(processCodeAndImages(jsCode, 'js', '', '', scriptMode).then(processedJsCode => {
-                    fs.writeFileSync(path.join(staticDir, 'script.js'), processedJsCode);
-                    files.push(scriptMode === 'flask' ? path.join('static','script.js') : 'script.js');
-                }));
-            }
-
-            if (htmlFileOption === 'multiple' && additionalHtmlCodes && additionalHtmlCodes.length > 0) {
-                additionalHtmlCodes.forEach((codeObj, index) => {
-                    if (codeObj && codeObj.code) {
-                        const fileName = codeObj.fileName || `page${index + 1}.html`;
-                        processPromises.push(processCodeAndImages(codeObj.code, 'html', fileName, '', scriptMode).then(processedCode => {
-                            fs.writeFileSync(path.join(templatesDir, fileName), processedCode);
-                            files.push(scriptMode === 'flask' ? path.join('templates', fileName) : fileName);
-                        }));
-                    }
-                });
-            }
-
-        if (scriptMode === 'flask' && typeof pythonCode === 'string') {
-            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
-                processedPy = insertFlaskSecretKey(processedPy);
-                fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
-                files.push('app.py');
-            }));
-        } else if (scriptMode === 'pygame' && typeof pythonCode === 'string') {
-            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
-                fs.writeFileSync(path.join(generatedDir, 'game.py'), processedPy);
-                files.push('game.py');
-            }));
-        } else if (scriptMode === 'pyqt5' && typeof pythonCode === 'string') {
-            processPromises.push(processCodeAndImages(pythonCode, 'py', '', '', scriptMode).then(processedPy => {
-                fs.writeFileSync(path.join(generatedDir, 'app.py'), processedPy);
-                files.push('app.py');
-            }));
-        }
-        }
-
-        await Promise.all(processPromises);
-        const errors = checkForErrors(htmlCode, cssCode, jsCode, pythonCode, scriptMode, additionalHtmlCodes);
-
-        if (errors.length > 0) {
-            res.json({ message: 'Code updated with errors', files: files, errors: errors });
-        } else {
-            res.json({ message: 'Code updated successfully', files: files });
+            res.json({ message: 'Code updated successfully', files: modified });
         }
     } catch (error) {
         console.error('Error editing code:', error);
