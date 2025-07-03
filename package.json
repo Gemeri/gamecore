@@ -85,6 +85,7 @@
     "setprototypeof": "^1.2.0",
     "side-channel": "^1.0.6",
     "statuses": "^2.0.1",
+    "string-similarity": "^4.0.4",
     "toidentifier": "^1.0.1",
     "tr46": "^0.0.3",
     "type-is": "^1.6.18",
