@@ -108,9 +108,9 @@ function saveHistory(history) {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
 }
 
-function addHistoryEntry(prompt, response) {
+function addHistoryMessage(content) {
     const history = loadHistory();
-    history.messages.push({ prompt, response });
+    history.messages.push({ content });
     saveHistory(history);
     return history.messages;
 }
@@ -118,10 +118,10 @@ function addHistoryEntry(prompt, response) {
 function buildHistoryText(history) {
     if (!history || history.length === 0) return '';
     let msgs = [...history];
-    let text = 'Previous requests:\n' + msgs.map((h, i) => `${i + 1}. ${h.prompt}`).join('\n') + '\n\n';
+    let text = 'Previous requests:\n' + msgs.map((h, i) => `${i + 1}. ${h.content}`).join('\n') + '\n\n';
     while (text.length > 12000 && msgs.length > 1) {
         msgs.shift();
-        text = 'Previous requests:\n' + msgs.map((h, i) => `${i + 1}. ${h.prompt}`).join('\n') + '\n\n';
+        text = 'Previous requests:\n' + msgs.map((h, i) => `${i + 1}. ${h.content}`).join('\n') + '\n\n';
     }
     if (msgs.length !== history.length) saveHistory({ messages: msgs });
     return text;
@@ -789,22 +789,6 @@ function normalizeWhitespace(str) {
     return str.replace(/\s+/g, ' ').trim();
 }
 
-function escapeRegExp(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function detectIndentation(content, oldSnippet) {
-    const firstLine = oldSnippet.split('\n').find(l => l.trim() !== '');
-    if (!firstLine) return '';
-    const regex = new RegExp('^(\\s*)' + escapeRegExp(firstLine.trim()), 'm');
-    const match = content.match(regex);
-    return match ? match[1] : '';
-}
-
-function applyIndentation(snippet, indent) {
-    return snippet.split('\n').map(line => indent + line).join('\n');
-}
-
 function replaceWithFallback(content, target, replacement) {
     const rawParas = content.split(/\n\s*\n/);
     const targetNorm = normalizeWhitespace(target);
@@ -925,9 +909,7 @@ function applyEditsToFiles(edits) {
     info.files.forEach(f => {
         let content = f.content;
         edits.forEach(edit => {
-            const indent = detectIndentation(content, edit.old);
-            const newSnippet = indent ? applyIndentation(edit.new, indent) : edit.new;
-            const result = replaceWithFallback(content, edit.old, newSnippet);
+            const result = replaceWithFallback(content, edit.old, edit.new);
             if (result !== false) {
                 content = result;
                 modified.add(f.path);
@@ -981,7 +963,7 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
                 },
             }
         );
-        return { prompt: finalPrompt, aiReply: response.data.content[0].text };
+        return response.data.content[0].text;
     } else if (model === 'gpt-4o') {
         const response = await requestWithRetry({
             method: 'post',
@@ -990,7 +972,7 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
               model: 'o3',
               messages: [{ role: 'system', content: 'You are a helpful assistant.' }, { role: 'user', content: finalPrompt }],
             }});
-            return { prompt: finalPrompt, aiReply: response.data.choices[0].message.content };
+            return response.data.choices[0].message.content;
             } else if (model === 'llama3') {
         const response = await axios.post(
             'https://api.llama-api.com/chat/completions',
@@ -1009,7 +991,7 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
                 },
             }
         );
-        return { prompt: finalPrompt, aiReply: response.data.choices[0].message.content };
+        return response.data.choices[0].message.content;
     }
 }
 
@@ -1033,7 +1015,7 @@ app.post('/generate-code', async (req, res) => {
         }
         clearGeneratedFolder();
         const prompt = req.body.prompt;
-        saveHistory({ messages: [] });
+        saveHistory({ messages: [{ content: prompt }] });
         const model = req.body.model;
         const scriptMode = req.body.scriptMode;
         const imageOption = req.body.imageOption;
@@ -1046,14 +1028,12 @@ app.post('/generate-code', async (req, res) => {
         const uploadedFiles = fs.readdirSync(uploadsDir);
         const codeContents = readCodeFiles(uploadedFiles);
 
-        const { prompt: fullPrompt, aiReply } = await generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
+        const aiReply = await generateCodeWithModel(prompt, model, uploadedFiles, codeContents, scriptMode, imageOption, htmlFileOption, htmlPageCount);
         console.log("response: " + aiReply);
         console.log("type is : " + typeof aiReply);
 
         lastPrompt = prompt;
         lastResponse = aiReply;
-        saveHistory({ messages: [] });
-        addHistoryEntry(fullPrompt, aiReply);
         
         const { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes } = extractCodeFromAIResponse(aiReply, scriptMode, htmlFileOption);
         
@@ -1192,10 +1172,10 @@ ${lastResponse}
 
 Please complete the code generation, ensuring all necessary parts are included.`;
 
-        const { prompt: fullPrompt, aiReply } = await generateCodeWithModel(continuePrompt, model, [], {}, scriptMode, imageOption, htmlFileOption, htmlPageCount);
-
+        const aiReply = await generateCodeWithModel(continuePrompt, model, [], {}, scriptMode, imageOption, htmlFileOption, htmlPageCount);
+        
+        
         lastResponse += aiReply;
-        addHistoryEntry(fullPrompt, aiReply);
         
         const { htmlCode, cssCode, jsCode, pythonCode, additionalHtmlCodes } = extractCodeFromAIResponse(lastResponse, scriptMode, htmlFileOption);
 
@@ -1644,13 +1624,12 @@ app.post('/edit-code', async (req, res) => {
         const prompt = req.body.prompt;
         const model = req.body.model;
         const scriptMode = req.body.scriptMode;
-        const historyData = loadHistory();
+        const history = addHistoryMessage(prompt);
         const info = gatherProjectInfo();
-        const finalPrompt = generatePatchEditPrompt(prompt, info.layout, info.codeText, buildHistoryText(historyData.messages));
+        const finalPrompt = generatePatchEditPrompt(prompt, info.layout, info.codeText, buildHistoryText(history));
 
         const aiReply = await editCodeWithModel(finalPrompt, model);
         console.log('response: ' + aiReply);
-        addHistoryEntry(finalPrompt, aiReply);
         const edits = parseEditInstructions(aiReply);
         const { modified, pending } = applyEditsToFiles(edits);
 
@@ -1663,37 +1642,10 @@ app.post('/edit-code', async (req, res) => {
             []
         );
 
-        if (errors.length > 0) {
-            // attempt automatic fix
-            try {
-                const generatedDir = path.join(__dirname, 'generated');
-                const htmlContent = fs.existsSync(path.join(generatedDir, 'index.html')) ? fs.readFileSync(path.join(generatedDir, 'index.html'), 'utf8') : '';
-                const cssContent = fs.existsSync(path.join(generatedDir, 'styles.css')) ? fs.readFileSync(path.join(generatedDir, 'styles.css'), 'utf8') : '';
-                const jsContent = fs.existsSync(path.join(generatedDir, 'script.js')) ? fs.readFileSync(path.join(generatedDir, 'script.js'), 'utf8') : '';
-
-                const fixed = await fixErrorWithModel(errors, model, htmlContent, cssContent, jsContent);
-                if (fixed.html) fs.writeFileSync(path.join(generatedDir, 'index.html'), fixed.html);
-                if (fixed.css) fs.writeFileSync(path.join(generatedDir, 'styles.css'), fixed.css);
-                if (fixed.js) fs.writeFileSync(path.join(generatedDir, 'script.js'), fixed.js);
-
-                const remaining = checkForErrors(fixed.html, fixed.css, fixed.js, null, 'html-js-css', []);
-                if (pending.length > 0) {
-                    res.json({ message: 'Some edits could not be applied', files: modified, pending: pending.map(p => p.old), errors: remaining });
-                } else if (remaining.length > 0) {
-                    res.json({ message: 'Code updated with errors', files: modified, errors: remaining });
-                } else {
-                    res.json({ message: 'Code updated successfully', files: modified });
-                }
-            } catch (fixErr) {
-                console.error('Error auto-fixing code:', fixErr);
-                if (pending.length > 0) {
-                    res.json({ message: 'Some edits could not be applied', files: modified, pending: pending.map(p => p.old), errors });
-                } else {
-                    res.json({ message: 'Code updated with errors', files: modified, errors });
-                }
-            }
-        } else if (pending.length > 0) {
+        if (pending.length > 0) {
             res.json({ message: 'Some edits could not be applied', files: modified, pending: pending.map(p => p.old) });
+        } else if (errors.length > 0) {
+            res.json({ message: 'Code updated with errors', files: modified, errors });
         } else {
             res.json({ message: 'Code updated successfully', files: modified });
         }
