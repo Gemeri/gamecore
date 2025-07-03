@@ -10,6 +10,7 @@ const { JSDOM } = require('jsdom');
 const jshint = require('jshint');
 const csslint = require('csslint').CSSLint;
 const stringSimilarity = require('string-similarity');
+const { reindentSnippet } = require("./helpers/reindent");
 require('dotenv').config();
 
 //to do: html selection option
@@ -933,10 +934,8 @@ function applyEditsToFiles(edits) {
                 const oldFirstLine = edit.old.split('\n')[0];
                 const match = content.match(new RegExp(oldFirstLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
                 const indent = match ? (match[0].match(/^\s*/)[0] || '') : '';
-                const newLines = edit.new.split('\n');
-                const baseIndent = newLines[0].match(/^\s*/)[0] || '';
-                const adjusted = newLines.map(l => indent + l.replace(new RegExp('^' + baseIndent), ''));
-                content = replaceWithFallback(content, edit.old, adjusted.join('\n'));
+                const adjusted = reindentSnippet(edit.new, indent);
+                content = replaceWithFallback(content, edit.old, adjusted);
                 modified.add(f.path);
                 edit.applied = true;
             }
