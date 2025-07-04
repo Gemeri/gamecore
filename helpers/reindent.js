@@ -15,4 +15,4 @@ function reindentSnippet(snippet, anchorIndent) {
     .join('\n');
 }
 
-module.exports = { reindentSnippet };
+module.exports = { reindentSnippet, dedent };
