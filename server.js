@@ -810,7 +810,8 @@ function normalizeWhitespace(str) {
 }
 
 function replaceWithFallback(content, target, replacement) {
-    const rawParas = content.split(/\n\s*\n/);
+    const rawParas = content.split(/\n{2,}/);
+
     const targetNorm = normalizeWhitespace(target);
     const writeBlock = (i, span) => {
         const before = rawParas.slice(0, i).join('\n\n');
@@ -931,10 +932,20 @@ function applyEditsToFiles(edits) {
         edits.forEach(edit => {
             const attempt = replaceWithFallback(content, edit.old, edit.new);
             if (attempt !== false) {
-                const oldFirstLine = edit.old.split('\n')[0];
-                const match = content.match(new RegExp(oldFirstLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-                const indent = match ? (match[0].match(/^\s*/)[0] || '') : '';
-                const adjusted = reindentSnippet(edit.new, indent);
+                const oldFirstLine = edit.old
+                .split('\n')
+                .find(l => l.trim()) || '';
+
+                // grab the indent of the **actual** line we’re replacing
+                const idxLineStart = content.indexOf(edit.old.trim());
+                const indentMatch  = idxLineStart >= 0
+                    ? content.slice(content.lastIndexOf('\n', idxLineStart) + 1, idxLineStart)
+                              .match(/^\s*/)[0]
+                    : '';
+                const indent = indentMatch || '';
+
+                const adjusted    = reindentSnippet(edit.new, indent);
+
                 content = replaceWithFallback(content, edit.old, adjusted);
                 modified.add(f.path);
                 edit.applied = true;
