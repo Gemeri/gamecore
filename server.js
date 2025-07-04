@@ -77,24 +77,51 @@ const axiosInstance = axios.create({
     }
   });
 
-  const requestWithRetry = async (axiosConfig, retries = 3) => {
+const requestWithRetry = async (axiosConfig, retries = 3) => {
     let attempt = 0;
     while (attempt < retries) {
-      try {
-        return await axiosInstance(axiosConfig);
-      } catch (error) {
-        if (error.response && error.response.status === 429) {
-          const retryAfter = error.response.headers['retry-after'] || 5;
-          console.log(`Rate limit exceeded. Retrying after ${retryAfter} seconds...`);
-          await new Promise(res => setTimeout(res, retryAfter * 1000));
-          attempt++;
-        } else {
-          throw error;
+        try {
+            return await axiosInstance(axiosConfig);
+        } catch (error) {
+            const status = error.response ? error.response.status : null;
+            if (status === 429) {
+                const retryAfter = error.response.headers['retry-after'] || 5;
+                console.log(`Rate limit exceeded. Retrying after ${retryAfter} seconds...`);
+                await new Promise(res => setTimeout(res, retryAfter * 1000));
+                continue; // do not count against retry limit
+            }
+            attempt++;
+            if (attempt >= retries) {
+                throw new Error('Max retries exceeded');
+            }
+            console.log(`Request failed with status ${status}. Retrying (${attempt}/${retries})...`);
+            await delay(2000);
         }
-      }
     }
-    throw new Error('Max retries exceeded');
-  };
+};
+
+const axiosPostWithRetry = async (url, data, config, retries = 3) => {
+    let attempt = 0;
+    while (attempt < retries) {
+        try {
+            return await axios.post(url, data, config);
+        } catch (error) {
+            const status = error.response ? error.response.status : null;
+            if (status === 429) {
+                const retryAfter = error.response.headers['retry-after'] || 5;
+                console.log(`Rate limit exceeded. Retrying after ${retryAfter} seconds...`);
+                await delay(retryAfter * 1000);
+                continue;
+            }
+            attempt++;
+            if (attempt >= retries) {
+                throw new Error('Max retries exceeded');
+            }
+            console.log(`Request failed with status ${status}. Retrying (${attempt}/${retries})...`);
+            await delay(2000);
+        }
+    }
+};
 
 const HISTORY_FILE = path.join(__dirname, 'conversationHistory.json');
 
@@ -164,7 +191,7 @@ app.post('/chat', upload.single('image'), async (req, res) => {
             ];
         }
 
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.anthropic.com/v1/messages',
             {
                 model: 'claude-3-5-sonnet-20240620',
@@ -200,7 +227,7 @@ function delay(ms) {
 app.post('/generate-image', async (req, res) => {
     const imagePrompt = req.body.prompt;
     try {
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.openai.com/v1/images/generations',
             {
                 model: 'dall-e-3',
@@ -528,7 +555,7 @@ Please fix all the errors while keeping the rest of the code intact. Provide the
 
     let aiReply;
     if (model === 'claude-3.5') {
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.anthropic.com/v1/messages',
             {
                 model: 'claude-3-5-sonnet-20240620',
@@ -555,7 +582,7 @@ Please fix all the errors while keeping the rest of the code intact. Provide the
         });
         aiReply = response.data.choices[0].message.content;
     } else if (model === 'llama3') {
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.llama-api.com/chat/completions',
             {
                 model: 'llama3.1-70b',
@@ -585,7 +612,7 @@ Please fix all the errors while keeping the rest of the code intact. Provide the
 
 async function generateAndSaveImage(prompt, filename, htmlFile, scriptMode = 'html-js-css') {
     try {
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.openai.com/v1/images/generations',
             {
                 model: 'dall-e-3',
@@ -620,11 +647,6 @@ async function generateAndSaveImage(prompt, filename, htmlFile, scriptMode = 'ht
 
         return uniqueFilename;
     } catch (error) {
-        if (error.response && error.response.status === 429) {
-            console.log('Rate limit reached. Waiting before retrying...');
-            await delay(10000); // Wait for 10 seconds before retrying
-            return generateAndSaveImage(prompt, filename, htmlFile);
-        }
         console.error('Error generating image:', error);
         throw error;
     }
@@ -1017,7 +1039,7 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
     console.log(finalPrompt);
     let aiReply;
     if (model === 'claude-3.5') {
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.anthropic.com/v1/messages',
             {
                 model: 'claude-3-5-sonnet-20240620',
@@ -1043,7 +1065,7 @@ async function generateCodeWithModel(prompt, model, uploadedFiles, codeContents,
             }});
         aiReply = response.data.choices[0].message.content;
     } else if (model === 'llama3') {
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.llama-api.com/chat/completions',
             {
                 model: 'llama3.1-70b',
@@ -1669,7 +1691,7 @@ async function editCodeWithModel(finalPrompt, model) {
     console.log(finalPrompt);
 
     if (model === 'claude-3.5') {
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.anthropic.com/v1/messages',
             {
                 model: 'claude-3-5-sonnet-20240620',
@@ -1695,7 +1717,7 @@ async function editCodeWithModel(finalPrompt, model) {
             }});
             return response.data.choices[0].message.content;
     } else if (model === 'llama3') {
-        const response = await axios.post(
+        const response = await axiosPostWithRetry(
             'https://api.llama-api.com/chat/completions',
             {
                 model: 'llama3.1-70b',
