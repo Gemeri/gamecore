@@ -38,8 +38,8 @@ A polished landing page where you can:
 * Draft or auto-generate a **game idea**
 * Pick a **model**, **script mode**, **image strategy**, and **HTML layout** (single or multiple pages)
 * Upload reference files to steer generation
-* See an **estimated wait time** (client-side heuristic) and a **live summary** of your options
-* Click **Generate** to start a full build, or **Play** for a one-page Quick Prototype
+* See an **estimated wait time** and a **live summary** of your options
+* Click **Generate** to start a full build, or **Play** for a one-page quick prototype
 
 It uses Choices.js for elegant selects, a responsive split layout, and a sleek preview card. We’ve invested in usability, inputs feel snappy, and the UI leans on a clean Inter + normalize baseline with “glass” surfaces and subtle depth
 
