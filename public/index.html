@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GameCore Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://unpkg.com/modern-normalize/modern-normalize.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css">
+<style>
+:root{
+  --bg: #0a0716;
+  --bg-2: #0f0a20;
+  --surface: rgba(28, 19, 46, 0.7);
+  --surface-strong: rgba(33, 23, 55, 0.9);
+  --card: #16102b;
+  --border: rgba(255,255,255,0.08);
+  --text: #EAE6F5;
+  --muted: #A7A0C1;
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --success: #47c65a;
+  --error: #ef4444;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,.45), 0 2px 10px rgba(0,0,0,.3);
+  --glass: blur(10px) saturate(120%);
+  --transition: 220ms cubic-bezier(.2,.6,.2,1);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body{
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #3b1a6d33 0%, transparent 55%),
+    radial-gradient(1000px 700px at 120% 10%, #1d2a8a33 0%, transparent 60%),
+    radial-gradient(700px 600px at 60% 120%, #6d28d933 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+
+/* top Nav*/
+.top-bar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  background: linear-gradient(180deg, rgba(18,12,34,.85), rgba(18,12,34,.70));
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+
+.top-bar img{
+  height: 34px;
+  width: 34px;
+  object-fit: contain;
+  margin-right: 10px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.3));
+}
+
+.top-bar span{
+  font-weight: 700;
+  letter-spacing: .2px;
+  font-size: 18px;
+}
+
+.nav a{
+  position: relative;
+  color: var(--text);
+  text-decoration: none;
+  margin-left: 18px;
+  font-weight: 500;
+  opacity: .9;
+  transition: opacity var(--transition);
+}
+.nav a::after{
+  content: "";
+  position: absolute;
+  left: 0; bottom: -8px;
+  width: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width var(--transition);
+  border-radius: 2px;
+}
+.nav a:hover{ opacity: 1; }
+.nav a:hover::after{ width: 100%; }
+
+#profile-link{
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(139,92,246,.25), rgba(34,211,238,.18));
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+  box-shadow: 0 4px 16px rgba(139,92,246,.15);
+}
+#profile-link:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(139,92,246,.25);
+}
+
+/* layout */
+.container{
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+
+.left, .right{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* cards */
+.card{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+}
+
+#prompt{
+  min-height: 140px;
+  resize: vertical;
+  background: linear-gradient(180deg, rgba(19,12,35,.9), rgba(19,12,35,.75));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+#prompt:focus{
+  border-color: rgba(139,92,246,.6);
+  box-shadow: 0 0 0 6px rgba(139,92,246,.12);
+}
+
+/* buttons */
+button, .btn{
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: .2px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition), background var(--transition), border-color var(--transition);
+}
+
+#generateIdea{
+  align-self: flex-start;
+  background: linear-gradient(180deg, rgba(139,92,246,.22), rgba(34,211,238,.18));
+  border: 1px solid var(--border);
+  color: var(--text);
+  box-shadow: 0 6px 20px rgba(34,211,238,.12);
+}
+#generateIdea:hover{ transform: translateY(-1px); box-shadow: 0 10px 26px rgba(34,211,238,.18); }
+
+#generate{
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color: white;
+  box-shadow: 0 10px 28px rgba(109,40,217,.45);
+}
+#generate:hover{ transform: translateY(-1px); box-shadow: 0 14px 36px rgba(109,40,217,.55); }
+#generate:active{ transform: translateY(0); }
+
+button:disabled, .disabled{
+  opacity: .55 !important;
+  pointer-events: none !important;
+}
+
+/* options form */
+.options{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.options label{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.options select,
+.options input[type="number"],
+.options input[type="file"]{
+  width: 100%;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.options select{
+  appearance: none;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0)),
+    url("data:image/svg+xml;utf8,<svg fill='white' opacity='.85' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat, no-repeat;
+  background-position: 0 0, right 10px center;
+  background-size: auto, 18px;
+  padding-right: 36px;
+}
+.options select:focus,
+.options input[type="number"]:focus{
+  border-color: rgba(139,92,246,.6);
+  box-shadow: 0 0 0 6px rgba(139,92,246,.12);
+}
+
+/* pretty file input */
+.options input[type="file"]::-webkit-file-upload-button,
+.options input[type="file"]::file-selector-button{
+  margin-right: 10px;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(139,92,246,.8), rgba(109,40,217,.85));
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter var(--transition), transform var(--transition);
+}
+.options input[type="file"]::-webkit-file-upload-button:hover,
+.options input[type="file"]::file-selector-button:hover{
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+/* HTML page count toggle */
+#html-count{
+  display: none; /* revealed by js when needed */
+}
+
+/* right column */
+.preview{
+  position: relative;
+  min-height: 300px;
+  background:
+    radial-gradient(800px 400px at 20% 10%, rgba(139,92,246,.18) 0%, transparent 60%),
+    radial-gradient(600px 500px at 80% 80%, rgba(34,211,238,.12) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(17,11,34,.85), rgba(17,11,34,.75));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center; justify-content: center;
+  color: #9aa0b3;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+}
+
+.preview::before{
+  content:"";
+  position:absolute; inset:-1px;
+  background:
+    linear-gradient( to right, transparent, rgba(139,92,246,.08), transparent );
+  opacity:.6;
+  mask-image: radial-gradient(400px 160px at 15% 10%, black, transparent 70%);
+  pointer-events:none;
+}
+
+.preview .play{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  font-size: 0;
+  z-index: 1;
+}
+
+/* build a taller triangle with borders */
+.preview .play::after{
+  content: "";
+  display: block;
+  width: 0; height: 0;
+  border-left: 42px solid var(--accent);
+  border-top: 28px solid transparent;
+  border-bottom: 28px solid transparent;
+  filter: drop-shadow(0 0 14px rgba(139,92,246,.35));
+}
+.preview .play:hover{
+  transform: translate(-50%, -50%) scale(1.06);
+}
+.preview iframe{
+  border: none;
+  width: 100%; height: 100%;
+  background: #0e0a1d;
+}
+
+.choices__list--dropdown .choices__item--selectable.is-highlighted,
+.choices__list--dropdown .choices__item--selectable:hover,
+.choices__list--dropdown .choices__item--choice.is-highlighted{
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* summary card */
+.summary{
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+#summaryText{
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: #f1edff;
+}
+#summaryList{
+  margin: 2px 0 6px 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+#summaryList li{
+  margin: 6px 0;
+}
+
+#waitText{
+  font-size: 13px;
+  color: #c6bfdf;
+  opacity: .9;
+}
+
+.choices,
+.choices__inner {
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.choices__list--single .choices__item,
+.choices__list--multiple .choices__item {
+  color: var(--text);
+}
+
+.options select option:hover,
+.options select option:focus{
+  background-color: #ffffff;
+  color: #000000;
+}
+
+.choices__list--dropdown,
+.choices__list[aria-expanded] {
+  background: #0f0a23;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
+}
+
+.choices__list--dropdown .choices__item--selectable {
+  color: var(--text);
+}
+
+.choices__list--dropdown .choices__item--selectable.is-highlighted {
+  background: #1f1538;
+  color: #fff;
+}
+
+.choices__placeholder { color: var(--muted) !important; }
+
+.choices.is-focused .choices__inner,
+.choices.is-open .choices__inner {
+  border-color: rgba(139,92,246,.6) !important;
+  box-shadow: 0 0 0 6px rgba(139,92,246,.12);
+}
+
+.choices__list--dropdown .choices__list {
+  max-height: 260px;
+}
+
+.loading-spinner{
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 4px solid rgba(255,255,255,.08);
+  border-top-color: var(--success);
+  animation: spin 900ms linear infinite;
+  box-shadow: 0 0 0 4px rgba(71,198,90,.08), inset 0 0 12px rgba(71,198,90,.15);
+}
+
+@keyframes spin{
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* reduce motion */
+@media (prefers-reduced-motion: reduce){
+  *{ transition: none !important; animation: none !important; }
+}
+
+/* responsive */
+@media (max-width: 1000px){
+  .container{ grid-template-columns: 1fr; }
+  .nav a{ margin-left: 12px; }
+}
+
+::selection{ background: rgba(139,92,246,.35); color: #fff; }
+a{ color: var(--accent); }
+a:hover{ color: #a78bfa; }
+
+.right{ gap: 20px; }
+</style>
+</head>
+<body>
+<div class="top-bar">
+    <div style="display:flex;align-items:center">
+        <img src="images/gamecore.png" alt="logo">
+        <span>GameCore</span>
+    </div>
+    <div class="nav">
+      <a href="/home">Home</a>
+      <a href="/editor">Editor</a>
+      <a href="/suggestions">Suggestions</a>
+    </div>
+    <div id="profile-link" style="cursor:pointer">&#128100;</div>
+</div>
+<div class="container">
+    <div class="left">
+        <textarea id="prompt" class="card" placeholder="Enter game description..."></textarea>
+        <button id="generateIdea" style="margin:5px 0">Generate idea</button>
+        <div class="options">
+            <label>Upload Files: <input type="file" id="code-files" multiple></label>
+            <label>Model:
+                <select id="model">
+                    <option value="claude-opus-4-1">Claude Opus 4.1</option>
+                    <option value="claude-sonnet-4">Claude Sonnet 4</option>
+                    <option value="gpt-5">GPT-5</option>
+                    <option value="gpt-4.1">GPT-4.1</option>
+                    <option value="o3">GPT-o3</option>
+                </select>
+            </label>
+            <label>Script Mode:
+                <select id="script-mode" onchange="toggleMode()">
+                    <option value="html-js-css">HTML, JS, CSS</option>
+                    <option value="html-only">HTML Only</option>
+                    <option value="flask">Flask</option>
+                    <option value="pygame">Pygame</option>
+                </select>
+            </label>
+            <label id="image-option-wrap">Images:
+              <select id="image-option">
+                <option value="default">Auto (if needed)</option>
+                <option value="include">Include placeholders</option>
+                <option value="exclude">No images</option>
+              </select>
+            </label>
+            <label id="html-option-wrap">HTML Option:
+                <select id="html-option">
+                    <option value="single">Single HTML</option>
+                    <option value="multiple">Multiple HTML</option>
+                    <option value="multiple-ai">Multiple HTML (AI)</option>
+                </select>
+                <input type="number" id="html-count" min="2" value="2" style="display:none">
+            </label>
+        </div>
+    </div>
+    <div class="right">
+        <div class="preview" id="preview">
+            <span class="play" onclick="playPreview()">&#9658;</span>
+        </div>
+        <div class="summary">
+            <div id="summaryText">Your options</div>
+            <ul id="summaryList" style="padding-left:20px;margin:5px 0"></ul>
+            <div id="waitText">Estimated Wait Time: -</div>
+            <button id="generate">Generate</button>
+        </div>
+    </div>
+</div>
+<script>
+let CSRF_TOKEN = null;
+let prevImageOption = 'default';
+
+async function fetchCsrf() {
+  const res = await fetch('/api/csrf-token', { credentials: 'include' });
+  const data = await res.json();
+  CSRF_TOKEN = data.csrfToken;
+  return CSRF_TOKEN;
+}
+
+async function ensureCsrf() {
+  if (!CSRF_TOKEN) await fetchCsrf();
+  return CSRF_TOKEN;
+}
+
+async function postJSON(url, bodyObj, retry = true) {
+  await ensureCsrf();
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-csrf-token': CSRF_TOKEN
+    },
+    body: JSON.stringify(bodyObj || {})
+  });
+  if (res.status === 403 && retry) {
+    CSRF_TOKEN = null;
+    await ensureCsrf();
+    return postJSON(url, bodyObj, false);
+  }
+  return res;
+}
+
+async function postForm(url, formData, retry = true) {
+  await ensureCsrf();
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'x-csrf-token': CSRF_TOKEN },
+    body: formData
+  });
+  if (res.status === 403 && retry) {
+    CSRF_TOKEN = null;
+    await ensureCsrf();
+    return postForm(url, formData, false);
+  }
+  return res;
+}
+
+function toggleMode() {
+  const mode = document.getElementById('script-mode').value;
+
+  const htmlWrap = document.getElementById('html-option-wrap');
+  const htmlOpt = document.getElementById('html-option');
+  const htmlCount = document.getElementById('html-count');
+
+  const imgWrap = document.getElementById('image-option-wrap');
+  const imgOpt = document.getElementById('image-option');
+
+  if (mode === 'pygame') {
+    // HTML options off in pygame
+    htmlOpt.disabled = true;
+    htmlCount.disabled = true;
+    htmlWrap.classList.add('disabled');
+
+    // force images off in pygame (server also enforces this)
+    prevImageOption = imgOpt.value;
+    imgOpt.value = 'exclude';
+    imgOpt.disabled = true;
+    imgWrap.classList.add('disabled');
+  } else {
+    // re-enable HTML options
+    htmlOpt.disabled = false;
+    htmlCount.disabled = false;
+    htmlWrap.classList.remove('disabled');
+
+    // restore image option
+    imgOpt.disabled = false;
+    imgWrap.classList.remove('disabled');
+    // only restore if we previously forced it to exclude
+    if (imgOpt.value === 'exclude' && prevImageOption) {
+      imgOpt.value = prevImageOption;
+    }
+  }
+}
+
+function playPreview() {
+    generatePreview();
+}
+
+function generatePreview() {
+    const box = document.getElementById('preview');
+    const prompt = document.getElementById('prompt').value.trim();
+    if (!prompt) return;
+    box.innerHTML = '<div class="loading-spinner"></div>';
+    postJSON('/quick-prototype', { prompt })
+    .then(r => r.json())
+    .then(d => {
+        if (d.html) {
+        const frame = document.createElement('iframe');
+        frame.style.width = '100%';
+        frame.style.height = '100%';
+        frame.style.border = 'none';
+        frame.srcdoc = d.html;
+        box.innerHTML = '';
+        box.appendChild(frame);
+        } else {
+        box.innerHTML = '<div style="color:red">Failed to load preview</div>';
+        }
+    })
+    .catch(() => {
+        box.innerHTML = '<div style="color:red">Error generating preview</div>';
+    });
+    }
+
+function gatherOptions() {
+  return {
+    prompt: document.getElementById('prompt').value,
+    model: document.getElementById('model').value,
+    scriptMode: document.getElementById('script-mode').value,
+    imageOption: document.getElementById('image-option').value,
+    htmlFileOption: document.getElementById('html-option').value,
+    htmlPageCount: document.getElementById('html-option').value === 'multiple'
+      ? parseInt(document.getElementById('html-count').value) || 2
+      : null
+  };
+}
+
+fetch('/saved-prototype', {
+  credentials: 'include',
+  headers: { 'Accept': 'application/json' }
+})
+  .then(r => r.json())
+  .then(d => {
+    if (!d.html) return;
+
+    const box = document.getElementById('preview');
+    const frame = document.createElement('iframe');
+
+    frame.style.width = '100%';
+    frame.style.height = '100%';
+    frame.style.border = 'none';
+    frame.srcdoc = d.html;
+
+    box.innerHTML = '';
+    box.appendChild(frame);
+  })
+  .catch(() => { /* ignore fetch errors silently */ });
+
+function updateSummary() {
+  const opts = gatherOptions();
+  const list = document.getElementById('summaryList');
+  list.innerHTML = '';
+  const add = (label, val) => {
+    const li = document.createElement('li');
+    li.textContent = label + ': ' + val;
+    list.appendChild(li);
+  };
+  const imgMap = { default: 'Auto', include: 'Include', exclude: 'Exclude' };
+
+  add('Prompt', opts.prompt.replace(/\n/g, ' ').slice(0,60) + (opts.prompt.length>60?'...':''));
+  add('Model', opts.model);
+  add('Script Mode', opts.scriptMode);
+  add('Images', imgMap[opts.imageOption] || opts.imageOption);
+  add('HTML Option', opts.htmlFileOption);
+  if (opts.htmlPageCount) add('Page Count', opts.htmlPageCount);
+}
+
+
+function estimateGradeLevel(text) {
+    const sentences = text.split(/[.!?]+/).filter(Boolean).length || 1;
+    const words = text.trim().split(/\s+/).filter(Boolean).length || 1;
+    const syllables = (text.toLowerCase().match(/[aeiouy]+/g) || []).length || 1;
+    const grade = 0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59;
+    return Math.max(1, Math.min(12, grade));
+}
+
+
+function updateWaitTime() {
+  const opts = gatherOptions();
+  const text = (opts.prompt || '').trim();
+
+  const secsToText = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.max(0, s - m * 60);
+    return `${m}m ${String(sec).padStart(2, '0')}s`;
+  };
+  const wordCount = (t) => (t.match(/\S+/g) || []).length;
+  const hasImageIntent = (t) => /(image|images|sprite|sprites|logo|icon|icons|illustration|photo|photos|gallery|texture|art|asset|assets|background|hero)/i.test(t);
+
+  const modeBase = {
+    'html-only': 165,
+    'html-js-css': 233,
+    'flask': 270,
+    'pygame': 180
+  }[opts.scriptMode] ?? 200;
+
+  // file strategy multiplier
+  const fileMult =
+    opts.htmlFileOption === 'multiple' ? 1.20 :
+    opts.htmlFileOption === 'multiple-ai' ? 0.60 : 1.00;
+
+  // Complexity from length
+  const wc = wordCount(text);
+  let complexityLen;
+  if (wc <= 3) complexityLen = 30; 
+  else if (wc <= 15) complexityLen = 28;
+  else if (wc <= 60) complexityLen = 45;
+  else if (wc <= 200) complexityLen = 55;
+  else complexityLen = 70;
+
+  // Reading level adjustment
+  const grade = estimateGradeLevel(text);
+  const gradeAdjSeconds = (grade - 6) * 1.0;
+
+  const complexityModeMult = {
+    'html-only': 1.00,
+    'html-js-css': 1.00,
+    'flask': 1.15,
+    'pygame': 0.55
+  }[opts.scriptMode] ?? 1.00;
+
+  let seconds = modeBase * fileMult;
+  seconds += (complexityLen * complexityModeMult);
+  seconds += gradeAdjSeconds;
+
+  // Extra pages cost when user explicitly asks for multiple pages
+  if (opts.htmlFileOption === 'multiple' && opts.htmlPageCount) {
+    const extraPages = Math.max(0, Number(opts.htmlPageCount) - 1);
+    seconds += extraPages * 20;
+  }
+
+  if (opts.scriptMode !== 'pygame') {
+    if (opts.imageOption === 'include') {
+      seconds += 90;
+    } else if (opts.imageOption === 'default' && hasImageIntent(text)) {
+      seconds += 60;
+    }
+  }
+
+  // small orchestration overhead
+  seconds += 10;
+
+  // model speed multiplier
+  const modelMultMap = {
+    'claude-opus-4-1': 1.00,
+    'claude-sonnet-4': 0.90,
+    'gpt-5': 0.98,
+    'gpt-4.1': 0.40,
+    'o3': 0.62
+  };
+  const modelMult = modelMultMap[opts.model] ?? 1.00;
+  seconds = Math.round(Math.max(60, seconds * modelMult));
+
+  const waitEl = document.getElementById('waitText');
+  if (waitEl) waitEl.textContent = `Estimated Wait Time: ${secsToText(seconds)}`;
+}
+
+document.getElementById('generate').onclick = function () {
+    fetch('/api/status').then(r=>r.json()).then(s=>{
+        if(!s.authenticated){
+            window.location.href = 'login.html';
+            return;
+        }
+        const opts = gatherOptions();
+        localStorage.setItem('generationOptions', JSON.stringify(opts));
+        localStorage.setItem('projectOptions', JSON.stringify(opts));
+        window.location.href = 'loading.html';
+    });
+};
+
+document.getElementById('generateIdea').onclick = function () {
+    const btn = this;
+    btn.disabled = true;
+    postJSON('/generate-idea', {})
+    .then(r => r.json())
+    .then(d => {
+        document.getElementById('prompt').value = d.idea || '';
+        updateSummary();
+        updateWaitTime();
+        btn.disabled = false;
+    })
+    .catch(() => { btn.disabled = false; });
+};
+
+['prompt','model','script-mode','image-option','html-option','html-count'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+        updateSummary();
+        updateWaitTime();
+    });
+});
+
+document.getElementById('html-option').onchange = function () {
+    document.getElementById('html-count').style.display = this.value === 'multiple'
+        ? 'inline-block' : 'none';
+};
+
+document.getElementById('profile-link').onclick = function(){
+    fetch('/api/status').then(r=>r.json()).then(s=>{
+        if(!s.authenticated){
+            window.location.href='login.html';
+        } else {
+            window.location.href='profile.html';
+        }
+    });
+};
+
+toggleMode();
+updateSummary();
+updateWaitTime();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<script>
+  // enhance all selects in the options section
+  document.querySelectorAll('.options select').forEach(el => {
+    new Choices(el, {
+      searchEnabled: false,
+      allowHTML: false,
+      itemSelectText: '',
+      shouldSort: false
+    });
+  });
+
+['prompt','model','script-mode','image-option','html-option','html-count'].forEach(id => {
+  ['input','change'].forEach(evt => {
+    const node = document.getElementById(id);
+    if (node) node.addEventListener(evt, () => { updateSummary(); updateWaitTime(); });
+  });
+});
+</script>
+</body>
+</html>
