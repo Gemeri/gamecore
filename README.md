@@ -100,7 +100,7 @@ npm start
 ```
 
 
-Environment variables (selected):
+Environment variables:
 
 | Name                                                       | Purpose                               |
 | ---------------------------------------------------------- | ------------------------------------- |
