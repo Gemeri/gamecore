@@ -1,4 +1,5 @@
 # Gamecore
+![GameCore Logo](public/images/gamecore-wide-with-text.png)
 
 GameCore is an AI-powered, browser-based web creation platform built with Node.js and Express. It helps you go from a plain-English idea to a playable multi-file prototype, complete with an editor, file manager, preview server, and optional pygame builder, all in one app. Under the hood, GameCore orchestrates trusted LLMs (OpenAI and Anthropic), enforces strong security defaults (argon2, CSRF, strict path handling, rate limits), and smooths the last mile with utilities like CSS/JS/Python linting, image placeholder replacement, and shareable preview URLs
 
