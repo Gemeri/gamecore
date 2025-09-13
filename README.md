@@ -125,8 +125,6 @@ Environment variables:
 
 ---
 
-## what’s next
+## Why Gamecore>
 
-GameCore aims to be delightfully practical, it lets you stay in the browser, iterate quickly, and still ship something you can share or even sideload to a device. The guardrails are there so creativity doesn’t compromise safety. Next steps we’re excited about: deeper test scaffolding, pluggable renderers (Phaser/Three.js templates), richer diffs, and multi-user co-editing.
-
-Build boldly, and have fun.
+GameCore aims to be delightfully practical, it lets you stay in the browser, iterate quickly, and still ship something you can share or even sideload to a device. The guardrails are there so creativity doesn’t compromise safety
