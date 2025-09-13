@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Generating… | GameCore</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://unpkg.com/modern-normalize/modern-normalize.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg: #0a0716;
+  --bg-2: #0f0a20;
+  --surface: rgba(28, 19, 46, 0.7);
+  --surface-strong: rgba(33, 23, 55, 0.9);
+  --border: rgba(255,255,255,0.08);
+  --text: #EAE6F5;
+  --muted: #A7A0C1;
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --success: #47c65a;
+  --error: #ef4444;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,.45), 0 2px 10px rgba(0,0,0,.3);
+  --glass: blur(10px) saturate(120%);
+  --transition: 220ms cubic-bezier(.2,.6,.2,1);
+}
+*{ box-sizing: border-box; }
+html, body { height: 100%; }
+:root { color-scheme: dark; }
+
+body{
+  margin:0;
+  font-family:"Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #3b1a6d33 0%, transparent 55%),
+    radial-gradient(1000px 700px at 120% 10%, #1d2a8a33 0%, transparent 60%),
+    radial-gradient(700px 600px at 60% 120%, #6d28d933 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+
+/* top bar*/
+.top-bar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px;
+  padding:14px 22px;
+  background: linear-gradient(180deg, rgba(18,12,34,.85), rgba(18,12,34,.70));
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.brand{
+  display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.2px;
+}
+.brand-logo{
+  width: 34px; height: 34px; border-radius: 8px; display:block;
+  object-fit: contain; image-rendering: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px rgba(139,92,246,.25);
+}
+.nav a{
+  position:relative; color:var(--text); text-decoration:none; margin-left:18px; font-weight:500; opacity:.9;
+  transition: opacity var(--transition);
+}
+.nav a::after{
+  content:""; position:absolute; left:0; bottom:-8px; width:0; height:2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width var(--transition); border-radius:2px;
+}
+.nav a:hover{ opacity:1; }
+.nav a:hover::after{ width:100%; }
+
+/* center layout */
+.main{
+  min-height: calc(100vh - 64px);
+  display:flex; align-items:center; justify-content:center;
+  padding: 28px 16px 40px;
+}
+.loader-card{
+  width: 100%;
+  max-width: 760px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+}
+
+.header{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 16px;
+}
+h1{
+  margin:0;
+  font-size: 20px;
+  letter-spacing:.2px;
+}
+.status-chip{
+  padding:8px 12px; border-radius:999px; font-size:12px; font-weight:600;
+  background: linear-gradient(180deg, rgba(139,92,246,.22), rgba(34,211,238,.18));
+  border: 1px solid var(--border);
+}
+
+/* progress */
+.progress-wrap{
+  position: relative;
+  margin-top: 4px;
+}
+.progress{
+  width: 100%;
+  height: 18px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+}
+.bar{
+  position: relative;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 24px rgba(139,92,246,.35), 0 0 12px rgba(34,211,238,.25);
+  transition: width var(--transition);
+}
+.bar::after{
+  content:"";
+  position:absolute; inset:0;
+  background: linear-gradient(120deg, rgba(255,255,255,.0) 0%, rgba(255,255,255,.35) 35%, rgba(255,255,255,.0) 70%);
+  transform: translateX(-100%);
+  animation: shimmer 2.2s linear infinite;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+@keyframes shimmer{
+  to { transform: translateX(100%); }
+}
+.progress-meta{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-top: 10px; font-size: 13px; color: var(--muted);
+}
+#status{
+  font-weight: 700; color: #f1edff; letter-spacing:.2px;
+}
+
+/* quotes */
+#quotes{
+  margin-top: 14px;
+  min-height: 24px;
+  display:flex; align-items:center; justify-content:center;
+  font-style: italic;
+  color: #c6bfdf;
+  opacity: .95;
+}
+
+.popup{
+  display: none;
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.popup::before{
+  content:""; position:absolute; inset:0; background: rgba(3, 2, 8, .55); backdrop-filter: blur(2px);
+}
+.popup-content{
+  position: relative;
+  width: min(92vw, 420px);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 18px 14px;
+  text-align: center;
+  box-shadow: var(--shadow);
+  animation: pop 200ms var(--transition);
+}
+@keyframes pop{
+  from{ transform: translateY(6px); opacity: 0; }
+  to  { transform: translateY(0); opacity: 1; }
+}
+.popup h2{
+  margin: 0 0 6px 0; font-size: 18px;
+}
+.popup p{
+  margin: 0; color: var(--muted);
+}
+.popup .actions{
+  margin-top: 14px; display:flex; justify-content:center; gap:10px;
+}
+.btn{
+  appearance:none; border:none; cursor:pointer; font-weight:600; letter-spacing:.2px;
+  border-radius: 12px; padding: 10px 14px;
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+}
+.btn-primary{
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color:#fff; box-shadow: 0 10px 28px rgba(109,40,217,.45);
+}
+.btn-primary:hover{ transform: translateY(-1px); box-shadow: 0 14px 36px rgba(109,40,217,.55); }
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *{ transition:none !important; animation:none !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- top bar -->
+<div class="top-bar">
+  <div class="brand">
+    <img
+      class="brand-logo"
+      src="images/gamecore.png"
+      alt="GameCore logo"
+      width="34"
+      height="34"
+      fetchpriority="high"
+    />
+    <span>GameCore</span>
+  </div>
+  <div class="nav">
+    <a href="/home">Home</a>
+    <a href="/editor">Editor</a>
+    <a href="/suggestions">Suggestions</a>
+  </div>
+</div>
+
+<!-- main -->
+<main class="main">
+  <section class="loader-card" aria-live="polite">
+    <div class="header">
+      <h1>Generating your project</h1>
+      <div class="status-chip">Working…</div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-labelledby="status">
+        <div class="bar" id="bar"></div>
+      </div>
+      <div class="progress-meta">
+        <div id="quotes">preparing build pipeline…</div>
+        <div id="status">0%</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- error -->
+<div class="popup" id="errorPopup" role="dialog" aria-modal="true" aria-labelledby="errTitle" aria-describedby="errMsg">
+  <div class="popup-content">
+    <h2 id="errTitle">Generation failed</h2>
+    <p id="errMsg">We couldn’t generate your project. Please try again.</p>
+    <div class="actions">
+      <button class="btn btn-primary" onclick="location.href='index.html'">Back</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* rotating quotes */
+const quotes = [
+  'creating errors',
+  'fixing errors',
+  'optimising code',
+  'thinking really hard',
+  'almost there'
+];
+
+// this is a variable called "quoteIndex" which we define as set to 0. a variable is a named storage location in a computer's memory that holds a value. It acts as a container that can be used to store, retrieve, and manipulate data within a program. Essentially, it's a way to label and refer to specific pieces of information, making code more readable and flexible
+let quoteIndex = 0;
+function cycleQuotes() {
+  document.getElementById('quotes').textContent = quotes[quoteIndex % quotes.length];
+  quoteIndex++;
+}
+cycleQuotes();
+setInterval(cycleQuotes, 5000);
+
+/* elements */
+const bar = document.getElementById('bar');
+const status = document.getElementById('status');
+const progressEl = document.querySelector('.progress');
+
+/* error popup */
+function showPopup(msg) {
+  if (msg) document.getElementById('errMsg').textContent = msg;
+  document.getElementById('errorPopup').style.display = 'flex';
+}
+
+let CSRF_TOKEN = null;
+async function fetchCsrf() {
+  const res = await fetch('/api/csrf-token', { credentials: 'include' });
+  const data = await res.json();
+  CSRF_TOKEN = data.csrfToken;
+  return CSRF_TOKEN;
+}
+async function ensureCsrf() {
+  if (!CSRF_TOKEN) await fetchCsrf();
+  return CSRF_TOKEN;
+}
+async function postJSON(url, bodyObj, retry = true) {
+  await ensureCsrf();
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-csrf-token': CSRF_TOKEN
+    },
+    body: JSON.stringify(bodyObj || {})
+  });
+  // if token rotated, refresh once and retry
+  if (res.status === 403 && retry) {
+    CSRF_TOKEN = null;
+    await ensureCsrf();
+    return postJSON(url, bodyObj, false);
+  }
+  return res;
+}
+
+/* if no progress starts, show popup */
+let failoverTimer;
+function armFailoverTimer(ms = 10000) {
+  clearTimeout(failoverTimer);
+  failoverTimer = setTimeout(() => showPopup('Generator didn’t start in time.'), ms);
+}
+
+/* create SSE ONCE */
+const evt = new EventSource('/progress');
+evt.onmessage = function(e) {
+  const val = parseInt(e.data, 10);
+  if (!isNaN(val)) {
+    if (val > 0) clearTimeout(failoverTimer);
+    bar.style.width = val + '%';
+    status.textContent = val + '%';
+    progressEl.setAttribute('aria-valuenow', val);
+    if (val >= 100) {
+      evt.close();
+      setTimeout(() => {
+        localStorage.removeItem('generationOptions');
+        location.href = 'web.html';
+      }, 500);
+    }
+  }
+};
+evt.onerror = () => {
+  // SSE failed
+  showPopup('Lost connection to the generator.');
+};
+
+/* kick off generation */
+function startGeneration() {
+  const opts = JSON.parse(localStorage.getItem('generationOptions') || 'null');
+  if (!opts) { location.href = 'index.html'; return; }
+  armFailoverTimer();
+
+  postJSON('/generate-code', opts)
+    .then(async (r) => {
+      // kog body if present
+      const payload = await r.clone().json().catch(() => null);
+      if (!r.ok) {
+        console.warn('Kickoff non-2xx', r.status, payload);
+      } else {
+        console.log('Kickoff OK', payload);
+      }
+    })
+    .catch((err) => {
+      console.error('Kickoff fetch error', err);
+    });
+}
+startGeneration();
+</script>
+</body>
+</html>

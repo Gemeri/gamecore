@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Suggestions • GameCore</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://unpkg.com/modern-normalize/modern-normalize.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css">
+<style>
+:root{
+  --bg: #0a0716;
+  --bg-2: #0f0a20;
+  --surface: rgba(28, 19, 46, 0.7);
+  --border: rgba(255,255,255,0.08);
+  --text: #EAE6F5;
+  --muted: #A7A0C1;
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --success: #47c65a;
+  --error: #ef4444;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,.45), 0 2px 10px rgba(0,0,0,.3);
+  --glass: blur(10px) saturate(120%);
+  --transition: 220ms cubic-bezier(.2,.6,.2,1);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; display:flex; flex-direction:column;
+  font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:var(--text);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #3b1a6d33 0%, transparent 55%),
+    radial-gradient(1000px 700px at 120% 10%, #1d2a8a33 0%, transparent 60%),
+    radial-gradient(700px 600px at 60% 120%, #6d28d933 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+
+/* Native select fallback: dark field + custom caret */
+select{
+  appearance:none;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0)),
+    url("data:image/svg+xml;utf8,<svg fill='white' opacity='.85' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat:no-repeat,no-repeat;
+  background-position:0 0, right 10px center;
+  background-size:auto,18px;
+  padding-right:36px;
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:linear-gradient(180deg, rgba(19,12,35,.9), rgba(19,12,35,.75));
+}
+
+/* Choices.js dark theme (match index.html) */
+.choices,
+.choices__inner{
+  background:linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  border:1px solid var(--border) !important;
+  border-radius:10px !important;
+  color:var(--text);
+  box-shadow:none;
+}
+.choices__list--single .choices__item,
+.choices__list--multiple .choices__item{
+  color:var(--text);
+}
+.choices__placeholder{ color:var(--muted) !important; }
+
+.choices__list--dropdown,
+.choices__list[aria-expanded]{
+  background:#0f0a23;
+  border:1px solid var(--border);
+  border-radius:12px;
+  box-shadow:0 16px 40px rgba(0,0,0,.45);
+}
+.choices__list--dropdown .choices__item--selectable{
+  color:var(--text);
+}
+
+/* Hover/active item = white bg with black text (high contrast like index) */
+.choices__list--dropdown .choices__item--selectable.is-highlighted,
+.choices__list--dropdown .choices__item--selectable:hover,
+.choices__list--dropdown .choices__item--choice.is-highlighted{
+  background:#ffffff !important;
+  color:#000000 !important;
+}
+
+.choices.is-focused .choices__inner,
+.choices.is-open .choices__inner{
+  border-color:rgba(139,92,246,.6) !important;
+  box-shadow:0 0 0 6px rgba(139,92,246,.12);
+}
+.choices__list--dropdown .choices__list{ max-height:260px; }
+
+/* top bar */
+.top-bar{
+  position: sticky; top: 0; z-index: 50;
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:14px 22px;
+  background: linear-gradient(180deg, rgba(18,12,34,.85), rgba(18,12,34,.70));
+  border-bottom:1px solid var(--border);
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.top-bar img{height:34px;width:34px;object-fit:contain;margin-right:10px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+.top-bar span{font-weight:700;letter-spacing:.2px;font-size:18px}
+.nav a{
+  position:relative; color:var(--text); text-decoration:none; margin-left:18px; font-weight:500; opacity:.9;
+  transition:opacity var(--transition);
+}
+.nav a::after{
+  content:""; position:absolute; left:0; bottom:-8px; width:0; height:2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius:2px;
+  transition:width var(--transition);
+}
+.nav a:hover{opacity:1} .nav a:hover::after{width:100%}
+
+/* layout */
+.main{flex:1; display:grid; place-items:center; padding:30px 16px}
+.card{
+  width:min(860px,95vw);
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass);
+  padding:18px;
+}
+.card h1{margin:6px 0 2px; font-size:22px}
+.card p.sub{margin:0 0 12px; color:var(--muted); font-size:13px}
+
+/* form */
+form{display:grid; gap:12px; margin-top:6px}
+.grid-2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+@media (max-width:720px){ .grid-2{grid-template-columns:1fr} }
+
+label{font-size:13px; color:var(--muted)}
+.input, select, textarea{
+  width:100%; padding:10px 12px;
+  background:linear-gradient(180deg, rgba(19,12,35,.9), rgba(19,12,35,.75));
+  color:var(--text); border:1px solid var(--border); border-radius:10px; outline:none;
+  transition:border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+.input:focus, select:focus, textarea:focus{
+  border-color:rgba(139,92,246,.6);
+  box-shadow:0 0 0 6px rgba(139,92,246,.12);
+}
+textarea{min-height:120px; resize:vertical}
+.hint{font-size:12px; color:#c6bfdf; margin-top:4px}
+
+.radios{display:flex; gap:10px; flex-wrap:wrap}
+.radio-chip{
+  display:flex; align-items:center; gap:8px;
+  padding:8px 10px; border:1px solid var(--border); border-radius:999px;
+  background:linear-gradient(180deg, rgba(139,92,246,.12), rgba(34,211,238,.08));
+  cursor:pointer; user-select:none;
+}
+.radio-chip input{accent-color:#8b5cf6}
+
+/* buttons */
+.actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:2px}
+button{
+  appearance:none; border:1px solid var(--border);
+  border-radius:12px; padding:12px 14px;
+  font-weight:600; letter-spacing:.2px; color:var(--text);
+  background: linear-gradient(180deg, rgba(139,92,246,.22), rgba(34,211,238,.18));
+  box-shadow:0 6px 18px rgba(139,92,246,.18);
+  cursor:pointer;
+  transition:transform var(--transition), box-shadow var(--transition), opacity var(--transition);
+}
+button:hover{transform:translateY(-1px); box-shadow:0 12px 28px rgba(139,92,246,.28)}
+button.primary{background:linear-gradient(135deg,#8b5cf6,#6d28d9); color:#fff; border-color:transparent; box-shadow:0 10px 28px rgba(109,40,217,.45)}
+button.primary:hover{box-shadow:0 14px 36px rgba(109,40,217,.55)}
+button:disabled{opacity:.6; pointer-events:none}
+.spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:spin 900ms linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* modal */
+.modal{
+  position:fixed; inset:0; display:none; place-items:center;
+  background:rgba(0,0,0,.55); z-index:1000; padding:16px;
+}
+.modal.open{display:grid}
+.modal .panel{
+  width:min(520px,95vw);
+  background:linear-gradient(180deg, rgba(23,15,44,.95), rgba(18,12,34,.95));
+  border:1px solid var(--border); border-radius:16px;
+  box-shadow:0 30px 80px rgba(0,0,0,.6); padding:18px;
+}
+.modal h2{margin:0 0 10px; font-size:18px}
+.badge{
+  display:inline-flex; align-items:center; gap:8px;
+  font-weight:700; letter-spacing:.2px;
+  padding:8px 10px; border-radius:999px;
+  background:linear-gradient(135deg, rgba(239,68,68,.2), rgba(139,92,246,.2));
+  border:1px solid rgba(239,68,68,.45);
+}
+.reason{margin:10px 0 12px; color:#eae6f5}
+.modal .actions{justify-content:flex-end}
+
+@keyframes shake {
+  0%,100%{ transform:translateX(0) }
+  20%{ transform:translateX(-6px) }
+  40%{ transform:translateX(6px) }
+  60%{ transform:translateX(-4px) }
+  80%{ transform:translateX(4px) }
+}
+.shake{ animation:shake 420ms ease-in-out }
+
+/* accessibility */
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important } }
+::selection{ background: rgba(139,92,246,.35); color:#fff }
+a{ color: var(--accent); } a:hover{ color:#a78bfa }
+</style>
+</head>
+<body>
+  <div class="top-bar">
+    <div style="display:flex;align-items:center">
+      <img src="images/gamecore.png" alt="logo">
+      <span>GameCore</span>
+    </div>
+    <div class="nav">
+      <a href="/home">Home</a>
+      <a href="/editor">Editor</a>
+      <a href="/suggestions">Suggestions</a>
+    </div>
+    <div></div>
+  </div>
+
+  <main class="main">
+    <div class="card" id="card">
+      <h1>Suggestion Box</h1>
+      <p class="sub">We highly value your feedback. Please fill this out in full so our highly-advanced triage system can evaluate it.</p>
+
+      <form id="suggest-form" novalidate>
+        <div class="grid-2">
+          <div>
+            <label for="name">Name</label>
+            <input id="name" class="input" type="text" placeholder="Ada Lovelace" autocomplete="name" required />
+          </div>
+          <div>
+            <label for="email">Email</label>
+            <input id="email" class="input" type="email" placeholder="ada@example.com" autocomplete="email" required />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <label for="subject">Subject</label>
+            <input id="subject" class="input" type="text" placeholder="Make the editor neon" required />
+          </div>
+          <div>
+            <label for="category">Category</label>
+            <select id="category" required>
+              <option value="">Select…</option>
+              <option value="feature">Feature request</option>
+              <option value="bug">Bug report</option>
+              <option value="design">Design / UI</option>
+              <option value="performance">Performance</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label>Urgency</label>
+          <div class="radios" role="group" aria-label="Urgency">
+            <label class="radio-chip"><input type="radio" name="urgency" value="low" checked> Low</label>
+            <label class="radio-chip"><input type="radio" name="urgency" value="medium"> Medium</label>
+            <label class="radio-chip"><input type="radio" name="urgency" value="high"> High</label>
+          </div>
+        </div>
+
+        <div>
+          <label for="message">Message</label>
+          <textarea id="message" placeholder="Describe your idea or issue in detail…" required></textarea>
+          <div class="hint">Please be specific so we can review it thoroughly.</div>
+        </div>
+
+        <div class="actions">
+          <button id="submitBtn" type="submit" class="primary"><span class="lbl">Submit suggestion</span></button>
+          <button id="resetBtn" type="button">Reset</button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <!-- Rejected Modal -->
+  <div id="modal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="rejTitle">
+    <div class="panel">
+      <div class="badge">❌ Suggestion Rejected</div>
+      <h2 id="rejTitle" style="margin-top:10px">Here's why:</h2>
+      <div class="reason" id="rejReason"></div>
+      <div class="actions">
+        <button id="closeModal" class="primary">Ok</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<script>
+let CSRF_TOKEN = null;
+async function fetchCsrf(){
+  const r = await fetch('/api/csrf-token', { credentials:'include' });
+  const d = await r.json().catch(()=>({}));
+  CSRF_TOKEN = d.csrfToken;
+  return CSRF_TOKEN;
+}
+async function ensureCsrf(){ if(!CSRF_TOKEN) await fetchCsrf(); return CSRF_TOKEN; }
+async function postJSON(url, bodyObj){
+  await ensureCsrf();
+  const res = await fetch(url, {
+    method:'POST', credentials:'include',
+    headers:{ 'Content-Type':'application/json', 'x-csrf-token': CSRF_TOKEN },
+    body: JSON.stringify(bodyObj || {})
+  });
+  const text = await res.clone().text();
+  let json=null; try{ json = JSON.parse(text); }catch(_){}
+  if(!res.ok) throw new Error(json?.error || text || 'Request failed');
+  return json || {};
+}
+
+const form = document.getElementById('suggest-form');
+const submitBtn = document.getElementById('submitBtn');
+const resetBtn = document.getElementById('resetBtn');
+const lbl = submitBtn.querySelector('.lbl');
+const card = document.getElementById('card');
+
+const modal = document.getElementById('modal');
+const closeModal = document.getElementById('closeModal');
+const rejReason = document.getElementById('rejReason');
+
+function setLoading(loading){
+  if(loading){
+    submitBtn.disabled = true;
+    lbl.innerHTML = '<span class="spinner" aria-hidden="true"></span>';
+  } else {
+    submitBtn.disabled = false;
+    lbl.textContent = 'Submit suggestion';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const el = document.getElementById('category');
+  if (el) {
+    new Choices(el, {
+      searchEnabled: false,
+      allowHTML: false,
+      itemSelectText: '',
+      shouldSort: false
+    });
+  }
+});
+
+function openModal(reason){
+  rejReason.textContent = reason || 'Your suggestion has been politely declined for mysterious reasons.';
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeModalFn(){
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+closeModal.onclick = closeModalFn;
+modal.addEventListener('click', (e)=>{ if(e.target === modal) closeModalFn(); });
+resetBtn.onclick = () => form.reset();
+document.addEventListener('DOMContentLoaded', fetchCsrf);
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const subject = document.getElementById('subject').value.trim();
+  const category = document.getElementById('category').value;
+  const message = document.getElementById('message').value.trim();
+  const urgency = (new FormData(form).get('urgency')) || 'low';
+
+  if(!name || !email || !subject || !category || !message){
+    card.classList.remove('shake'); // restart animation
+    void card.offsetWidth;
+    card.classList.add('shake');
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const payload = { name, email, subject, category, urgency, message };
+    const data = await postJSON('/api/deny-suggestion', payload);
+    openModal(data.reason || 'Denied for now,  please try again later');
+  } catch (err) {
+    openModal('Our denial engine is currently overwhelmed. Please try again later.');
+  } finally {
+    setLoading(false);
+  }
+};
+</script>
+</body>
+</html>

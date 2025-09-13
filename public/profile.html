@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Profile | GameCore</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://unpkg.com/modern-normalize/modern-normalize.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg: #0a0716;
+  --bg-2: #0f0a20;
+  --surface: rgba(28, 19, 46, 0.7);
+  --surface-strong: rgba(33, 23, 55, 0.9);
+  --border: rgba(255,255,255,0.08);
+  --text: #EAE6F5;
+  --muted: #A7A0C1;
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --success: #47c65a;
+  --error: #ef4444;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,.45), 0 2px 10px rgba(0,0,0,.3);
+  --glass: blur(10px) saturate(120%);
+  --transition: 220ms cubic-bezier(.2,.6,.2,1);
+}
+*{ box-sizing: border-box; }
+html, body { height: 100%; }
+:root { color-scheme: dark; }
+
+body{
+  margin:0;
+  font-family:"Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #3b1a6d33 0%, transparent 55%),
+    radial-gradient(1000px 700px at 120% 10%, #1d2a8a33 0%, transparent 60%),
+    radial-gradient(700px 600px at 60% 120%, #6d28d933 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+
+/* top bar */
+.top-bar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px;
+  padding:14px 22px;
+  background: linear-gradient(180deg, rgba(18,12,34,.85), rgba(18,12,34,.70));
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.brand{
+  display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.2px;
+}
+.brand img{ height:34px; width:34px; object-fit:contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,.3)); }
+.nav a{
+  position:relative; color:var(--text); text-decoration:none; margin-left:18px; font-weight:500; opacity:.9;
+  transition: opacity var(--transition);
+}
+.nav a::after{
+  content:""; position:absolute; left:0; bottom:-8px; width:0; height:2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width var(--transition); border-radius:2px;
+}
+.nav a:hover{ opacity:1; }
+.nav a:hover::after{ width:100%; }
+
+/* logout button */
+#logout{
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:10px 14px; border-radius:12px; cursor:pointer; user-select:none;
+  background: linear-gradient(180deg, rgba(139,92,246,.22), rgba(34,211,238,.18));
+  border: 1px solid var(--border);
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+  box-shadow: 0 6px 18px rgba(139,92,246,.20);
+}
+#logout:hover{ transform: translateY(-1px); box-shadow: 0 10px 26px rgba(139,92,246,.28); }
+
+/* layout */
+.main{
+  min-height: calc(100vh - 64px);
+  display:flex; align-items:center; justify-content:center;
+  padding: 28px 16px 40px;
+}
+.card{
+  width: 100%;
+  max-width: 720px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  padding: 22px;
+}
+
+/* header */
+.card-header{
+  display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom: 18px;
+}
+.card-title{ margin:0; font-size:20px; letter-spacing:.2px; }
+.subtle{ color: var(--muted); font-size:13px; }
+
+/* profile row */
+.profile-row{
+  display:flex; align-items:center; gap:16px; margin-bottom: 10px;
+}
+.avatar{
+  width:60px; height:60px; border-radius:50%;
+  background: linear-gradient(135deg, rgba(139,92,246,.45), rgba(34,211,238,.30));
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(109,40,217,.35);
+  display:grid; place-items:center; font-weight:700;
+}
+
+/* form */
+.form{
+  display:grid; gap:14px; grid-template-columns: 1fr 1fr;
+}
+.form .full{ grid-column: 1 / -1; }
+
+.field{
+  display:flex; flex-direction:column; gap:8px;
+}
+label{ font-size:13px; color: var(--muted); }
+.input{
+  width:100%;
+  padding:12px 14px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline:none;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+.input:focus{
+  border-color: rgba(139,92,246,.6);
+  box-shadow: 0 0 0 6px rgba(139,92,246,.12);
+}
+
+.actions{
+  display:flex; gap:10px; justify-content:flex-end; margin-top: 8px;
+}
+.btn{
+  appearance:none; border:none; cursor:pointer; font-weight:600; letter-spacing:.2px;
+  border-radius: 12px; padding: 12px 16px;
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition), opacity var(--transition);
+}
+.btn-primary{
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color:#fff; box-shadow: 0 10px 28px rgba(109,40,217,.45);
+}
+.btn-primary:hover{ transform: translateY(-1px); box-shadow: 0 14px 36px rgba(109,40,217,.55); }
+.btn:disabled{ opacity:.55; pointer-events:none; }
+
+/* status row */
+.status-row{
+  display:flex; align-items:center; justify-content:space-between; margin-top: 10px;
+}
+#saveStatus{ font-size:13px; color: var(--muted); min-height: 18px; }
+
+/* toast (works with butter) */
+.toast{
+  position: fixed; left:50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: var(--shadow);
+  opacity: 0; pointer-events:none;
+  transition: transform var(--transition), opacity var(--transition);
+}
+.toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* skeleton (loading) */
+.skeleton{
+  position: relative; overflow: hidden; border-radius: 8px; background: #1a1230;
+}
+.skeleton::after{
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(120deg, rgba(255,255,255,0), rgba(255,255,255,.10), rgba(255,255,255,0));
+  transform: translateX(-100%); animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer{ to{ transform: translateX(100%); } }
+
+/* responsive */
+@media (max-width: 720px){
+  .form{ grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- top bar -->
+<div class="top-bar">
+  <div class="brand">
+    <img src="images/gamecore.png" alt="GameCore logo">
+    <span>GameCore</span>
+  </div>
+  <div class="nav">
+    <a href="/home">Home</a>
+    <a href="/editor">Editor</a>
+    <a href="/suggestions">Suggestions</a>
+  </div>
+  <div id="logout" title="Logout">Logout</div>
+</div>
+
+<!-- main -->
+<main class="main">
+  <section class="card" aria-live="polite">
+    <div class="card-header">
+      <h1 class="card-title">Profile</h1>
+      <div class="subtle">Manage your account details</div>
+    </div>
+
+    <div class="profile-row">
+      <div class="avatar" id="avatar" aria-hidden="true">GC</div>
+      <div>
+        <div class="subtle">Signed in as</div>
+        <div id="email" class="email skeleton" style="height:18px; width:240px;"></div>
+      </div>
+    </div>
+
+    <form class="form" onsubmit="return false;">
+      <div class="field full">
+        <label for="nickname">Nickname</label>
+        <input id="nickname" class="input" placeholder="Enter a display name" autocomplete="off" />
+      </div>
+      <div class="actions full">
+        <button id="save" class="btn btn-primary" disabled>Save</button>
+      </div>
+    </form>
+
+    <div class="status-row">
+      <div id="saveStatus" aria-live="polite"></div>
+    </div>
+  </section>
+</main>
+
+<!-- toast (to raise) -->
+<div class="toast" id="toast">Saved</div>
+
+<script>
+(function(){
+
+  let CSRF_TOKEN = null;
+
+  async function fetchCsrf() {
+    const res = await fetch('/api/csrf-token', { credentials: 'include' });
+    const data = await res.json();
+    CSRF_TOKEN = data.csrfToken;
+    return CSRF_TOKEN;
+  }
+  async function ensureCsrf() {
+    if (!CSRF_TOKEN) await fetchCsrf();
+    return CSRF_TOKEN;
+  }
+  async function postJSON(url, bodyObj, retry = true) {
+    await ensureCsrf();
+    const res = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': CSRF_TOKEN
+      },
+      body: JSON.stringify(bodyObj || {})
+    });
+    if (res.status === 403 && retry) {
+      // where are you CSRF tokens???
+      CSRF_TOKEN = null;
+      await ensureCsrf();
+      return postJSON(url, bodyObj, false);
+    }
+    return res;
+  }
+
+  // kick off token fetch early
+  fetchCsrf().catch(console.error);
+  const emailEl = document.getElementById('email');
+  const nicknameEl = document.getElementById('nickname');
+  const saveBtn = document.getElementById('save');
+  const logoutBtn = document.getElementById('logout');
+  const toast = document.getElementById('toast');
+  const saveStatus = document.getElementById('saveStatus');
+  const avatar = document.getElementById('avatar');
+
+  let originalNickname = '';
+  let userEmail = '';
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(()=> toast.classList.remove('show'), 1800);
+  }
+
+  function setSavingState(on){
+    if (on){
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      saveStatus.textContent = 'Saving changes…';
+    } else {
+      saveBtn.textContent = 'Save';
+      saveStatus.textContent = '';
+      const changed = nicknameEl.value.trim() !== originalNickname.trim();
+      saveBtn.disabled = !changed;
+    }
+  }
+
+  function setEmailText(text){
+    // remove skeleton and set visible text
+    emailEl.classList.remove('skeleton');
+    emailEl.style.height = 'auto';
+    emailEl.style.width = 'auto';
+    emailEl.textContent = text;
+  }
+
+  function updateAvatarInitials(email){
+    const name = (email || '').split('@')[0] || 'GC';
+    const initials = name.slice(0,2).toUpperCase();
+    avatar.textContent = initials;
+  }
+
+  // load profile
+  fetch('/api/profile', { credentials: 'include' })
+    .then(r => {
+      if (r.status === 401) { window.location = 'login.html'; return Promise.reject(); }
+      return r.json();
+    })
+    .then(d => {
+      userEmail = d.email || '';
+      setEmailText(userEmail);
+      updateAvatarInitials(userEmail);
+      nicknameEl.value = d.nickname || '';
+      originalNickname = nicknameEl.value || '';
+      saveBtn.disabled = true;
+    })
+    .catch(() => {
+      setEmailText('Unknown');
+      saveStatus.textContent = 'Could not load profile.';
+    });
+
+  // enable save only when changed
+  nicknameEl.addEventListener('input', () => {
+    const changed = nicknameEl.value.trim() !== originalNickname.trim();
+    saveBtn.disabled = !changed;
+  });
+
+  // save profile
+  saveBtn.addEventListener('click', () => {
+    const nickname = nicknameEl.value.trim();
+    setSavingState(true);
+    postJSON('/api/profile', { nickname })
+      .then(async r => {
+        if (!r.ok) {
+          console.warn('Profile save failed', r.status, await r.clone().text());
+          throw new Error('save_failed');
+        }
+        return r.json();
+      })
+      .then(() => {
+        originalNickname = nickname;
+        showToast('Saved');
+        setSavingState(false);
+      })
+      .catch(() => {
+        saveStatus.textContent = 'Save failed. Please try again.';
+        saveBtn.textContent = 'Save';
+        saveBtn.disabled = false;
+      });
+  });
+
+
+  // logout
+  logoutBtn.addEventListener('click', () => {
+    postJSON('/api/logout', {})
+      .then(() => { window.location = 'login.html'; })
+      .catch(() => { showToast('Logout failed'); });
+  });
+})();
+</script>
+</body>
+</html>

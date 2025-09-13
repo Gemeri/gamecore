@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Login • GameCore</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://unpkg.com/modern-normalize/modern-normalize.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg: #0a0716;
+  --bg-2: #0f0a20;
+  --surface: rgba(28, 19, 46, 0.7);
+  --surface-strong: rgba(33, 23, 55, 0.9);
+  --border: rgba(255,255,255,0.08);
+  --text: #EAE6F5;
+  --muted: #A7A0C1;
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --success: #47c65a;
+  --error: #ef4444;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,.45), 0 2px 10px rgba(0,0,0,.3);
+  --glass: blur(10px) saturate(120%);
+  --transition: 220ms cubic-bezier(.2,.6,.2,1);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body{
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #3b1a6d33 0%, transparent 55%),
+    radial-gradient(1000px 700px at 120% 10%, #1d2a8a33 0%, transparent 60%),
+    radial-gradient(700px 600px at 60% 120%, #6d28d933 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+
+/* top bar */
+.top-bar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  background: linear-gradient(180deg, rgba(18,12,34,.85), rgba(18,12,34,.70));
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.top-bar img{
+  height: 34px;
+  width: 34px;
+  object-fit: contain;
+  margin-right: 10px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.3));
+}
+.top-bar span{ font-weight: 700; letter-spacing: .2px; font-size: 18px; }
+.nav a{
+  position: relative; color: var(--text); text-decoration: none; margin-left: 18px; font-weight: 500; opacity: .9;
+  transition: opacity var(--transition);
+}
+.nav a::after{
+  content: ""; position: absolute; left: 0; bottom: -8px; width: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 2px;
+  transition: width var(--transition);
+}
+.nav a:hover{ opacity: 1; } .nav a:hover::after{ width: 100%; }
+
+/* page layout */
+.main{
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 30px 16px;
+}
+.card{
+  width: min(440px, 92vw);
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+}
+
+/* headline and intro */
+.card h1{
+  margin: 6px 0 4px;
+  font-size: 22px;
+  letter-spacing: .2px;
+}
+.card p.sub{
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* form */
+form{
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+label{
+  font-size: 13px;
+  color: var(--muted);
+}
+input{
+  width: 100%;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(19,12,35,.9), rgba(19,12,35,.75));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+input:focus{
+  border-color: rgba(139,92,246,.6);
+  box-shadow: 0 0 0 6px rgba(139,92,246,.12);
+}
+
+/* buttons (you're supposed to click them) */
+button{
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(139,92,246,.22), rgba(34,211,238,.18));
+  box-shadow: 0 6px 18px rgba(139,92,246,.18);
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition), opacity var(--transition);
+}
+button:hover{ transform: translateY(-1px); box-shadow: 0 12px 28px rgba(139,92,246,.28); }
+button:disabled{ opacity: .6; pointer-events: none; }
+
+/* primary action */
+button.primary{
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 10px 28px rgba(109,40,217,.45);
+}
+button.primary:hover{ box-shadow: 0 14px 36px rgba(109,40,217,.55); }
+
+/* google button */
+button.google{
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.85));
+  color: #111; border: 1px solid rgba(255,255,255,.8);
+}
+button.google:hover{ box-shadow: 0 10px 24px rgba(255,255,255,.25); transform: translateY(-1px); }
+button.google svg{ width: 18px; height: 18px; }
+
+.actions{
+  display: grid; gap: 8px; margin-top: 6px;
+}
+
+/* divider */
+.divider{
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 6px 0;
+}
+.divider::before, .divider::after{ content: ""; height: 1px; background: var(--border); display: block; }
+
+.small-note{ font-size: 12px; color: #c6bfdf; line-height: 1.4; }
+.meta-row{
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 6px;
+}
+.meta-row a{ color: var(--accent); text-decoration: none; }
+.meta-row a:hover{ color: #a78bfa; }
+
+/* inline error */
+.form-error{
+  display: none;
+  color: #ffb4b4;
+  background: rgba(239,68,68,.12);
+  border: 1px solid rgba(239,68,68,.35);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.spinner{
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: #fff;
+  animation: spin 900ms linear infinite;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+
+#debug{
+  position: fixed; right: 10px; bottom: 10px; width: min(520px,95vw); max-height: 40vh; overflow: auto;
+  background: #0b0b12; border: 1px solid #333; border-radius: 8px; padding: 10px 12px; font: 12px/1.4 monospace;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); display: none;
+}
+#debug pre{ white-space: pre-wrap; word-break: break-word; margin: 4px 0; }
+#debug .row{ border-top: 1px dashed #333; margin-top: 6px; padding-top: 6px; }
+#debug .ok{ color:#7cff9b } #debug .warn{ color:#ffd26e } #debug .err{ color:#ff7b7b }
+
+/* rdeduce motion */
+@media (prefers-reduced-motion: reduce){
+  *{ transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+  <div class="top-bar">
+    <div style="display:flex;align-items:center">
+      <img src="images/gamecore.png" alt="logo">
+      <span>GameCore</span>
+    </div>
+    <div class="nav">
+      <a href="/home">Home</a>
+      <a href="/editor">Editor</a>
+      <a href="/suggestions">Suggestions</a>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <a href="signup.html" style="text-decoration:none">
+        <button style="padding:10px 12px">Sign Up</button>
+      </a>
+    </div>
+  </div>
+
+  <main class="main">
+    <div class="card" aria-labelledby="login-title">
+      <h1 id="login-title">Welcome back</h1>
+      <p class="sub">Log in to continue building with GameCore.</p>
+
+      <div id="formError" class="form-error" role="alert"></div>
+
+      <form id="login-form" novalidate>
+        <div>
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="your@email.com" autocomplete="username" required />
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+        </div>
+
+        <div class="actions">
+          <button id="loginBtn" class="primary" type="submit">
+            <span class="btn-label">Login</span>
+          </button>
+
+          <div class="divider">or</div>
+
+          <button id="google" type="button" class="google" aria-label="Sign in with Google">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#EA4335" d="M24 9.5c3.7 0 7 1.3 9.6 3.8l7.2-7.2C36.7 1.8 30.7 0 24 0 14.6 0 6.4 4.9 1.9 12l8.8 6.9C13 13.3 18 9.5 24 9.5z"/>
+              <path fill="#34A853" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.6-2 4.9-4.3 6.4l6.7 5.2c3.9-3.6 7.3-9.3 7.3-16.1z"/>
+              <path fill="#4A90E2" d="M9.2 28.9c-1-2.6-1.6-5.4-1.6-8.4s.6-5.8 1.6-8.4L.4 5.2C-1.5 8.9-2.5 13.2-2.5 17.9s1 9.1 2.9 12.8l8.8-6.8z"/>
+              <path fill="#FBBC05" d="M24 48c6.5 0 12-2.1 16-5.7l-6.7-5.2c-2 1.3-4.6 2.1-7.4 2.1-6 0-11-3.9-12.9-9.2l-8.8 6.8C6.4 43.1 14.6 48 24 48z"/>
+            </svg>
+            <span>Sign in with Google</span>
+          </button>
+        </div>
+
+        <div class="meta-row">
+          <a href="signup.html">Create an account</a>
+          <a href="reset.html">Forgot password?</a>
+        </div>
+
+        <div class="small-note" style="margin-top:8px">
+          Protected by reCAPTCHA — <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Privacy</a> •
+          <a href="https://policies.google.com/terms" target="_blank" rel="noopener">Terms</a>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <!-- debug -->
+  <div id="debug"></div>
+
+<script>
+const qs = new URLSearchParams(location.search);
+const DEBUG = qs.has('debug') || false;
+const panel = document.getElementById('debug');
+const redact = (s, keep = 6) => (typeof s === 'string' ? (s.length > keep ? `${s.slice(0, keep)}…(${s.length})` : s) : s);
+const safeLen = s => (typeof s === 'string' ? s.length : 0);
+
+function dlog(kind, label, data){
+  if(!DEBUG){
+    const fn = kind==='err' ? 'error' : kind==='warn' ? 'warn' : 'log';
+    console[fn](`[${label}]`, data||'');
+    return;
+  }
+  panel.style.display='block';
+  const row = document.createElement('div'); row.className='row';
+  const pre = document.createElement('pre');
+  pre.className = kind || '';
+  pre.textContent = `[${new Date().toISOString()}] ${label}\n` + (data ? (typeof data==='string'?data:JSON.stringify(data,null,2)) : '');
+  row.appendChild(pre);
+  panel.appendChild(row);
+  panel.scrollTop = panel.scrollHeight;
+}
+function dtime(label, t0){ dlog('log', `${label} (took ${Math.round(performance.now()-t0)}ms)`); }
+
+let CSRF_TOKEN = null;
+let RECAPTCHA_SITE_KEY = null;
+let RECAPTCHA_LOADED = false;
+
+async function fetchCsrf() {
+  const t0=performance.now();
+  const res = await fetch('/api/csrf-token', { credentials:'include' });
+  const data = await res.json().catch(()=>({}));
+  CSRF_TOKEN = data.csrfToken;
+  dlog('log','CSRF fetched',{ present: !!CSRF_TOKEN, length: safeLen(CSRF_TOKEN) });
+  dtime('fetchCsrf()', t0);
+  return CSRF_TOKEN;
+}
+async function ensureCsrf(){ if(!CSRF_TOKEN) await fetchCsrf(); return CSRF_TOKEN; }
+
+async function fetchSiteKey(){
+  const t0=performance.now();
+  if (RECAPTCHA_SITE_KEY) return RECAPTCHA_SITE_KEY;
+  const r = await fetch('/api/recaptcha/sitekey', { credentials:'include' });
+  const d = await r.json().catch(()=>({}));
+  RECAPTCHA_SITE_KEY = d.siteKey || '';
+  dlog(RECAPTCHA_SITE_KEY ? 'log':'warn','Site key', { present: !!RECAPTCHA_SITE_KEY, length: safeLen(RECAPTCHA_SITE_KEY) });
+  dtime('fetchSiteKey()', t0);
+  return RECAPTCHA_SITE_KEY;
+}
+
+async function loadRecaptcha(){
+  const siteKey = await fetchSiteKey();
+  if(!siteKey) throw new Error('recaptcha_site_key_missing');
+  if (!window.grecaptcha || !RECAPTCHA_LOADED){
+    const t0=performance.now();
+    await new Promise((resolve, reject)=>{
+      const s = document.createElement('script');
+      s.src = 'https://www.google.com/recaptcha/api.js?render='+encodeURIComponent(siteKey);
+      s.async = true; s.defer = true;
+      s.onload = ()=>{ RECAPTCHA_LOADED = true; dlog('ok','grecaptcha loaded'); dtime('loadRecaptcha()',t0); resolve(); };
+      s.onerror = ()=>reject(new Error('recaptcha_script_failed'));
+      document.head.appendChild(s);
+    });
+  }
+  return siteKey;
+}
+
+function greReady(){
+  return new Promise(resolve=>{
+    if(!window.grecaptcha){ resolve(); return; }
+    window.grecaptcha.ready(resolve);
+  });
+}
+
+async function getRecaptchaToken(siteKey, action){
+  const t0=performance.now();
+  await greReady();
+  const token = await window.grecaptcha.execute(siteKey, { action });
+  dlog('log','reCAPTCHA token',{ action, length:safeLen(token), preview:redact(token||'', 10) });
+  dtime('grecaptcha.execute', t0);
+  return token;
+}
+
+async function postJSON(url, bodyObj, retry=true){
+  await ensureCsrf();
+  const t0=performance.now();
+  const res = await fetch(url,{
+    method:'POST', credentials:'include',
+    headers:{ 'Content-Type':'application/json', 'x-csrf-token': CSRF_TOKEN },
+    body: JSON.stringify(bodyObj || {})
+  });
+  if(res.status===403 && retry){
+    dlog('warn','403 from POST — refreshing CSRF');
+    CSRF_TOKEN=null; await ensureCsrf();
+    return postJSON(url, bodyObj, false);
+  }
+  const text = await res.clone().text();
+  let json=null; try{ json = JSON.parse(text); }catch(_){}
+  dlog(res.ok?'ok':'warn', `POST ${url} -> ${res.status}`, { json: json||null, text: json?undefined:text.slice(0,200) });
+  dtime(`postJSON(${url})`, t0);
+  return { res, json, text };
+}
+
+const loginForm = document.getElementById('login-form');
+const loginBtn = document.getElementById('loginBtn');
+const googleBtn = document.getElementById('google');
+const formError = document.getElementById('formError');
+const btnLabel = loginBtn.querySelector('.btn-label');
+
+document.addEventListener('keydown', (e) => {
+  const k = (e.key || '').toLowerCase();
+  if (k === 'd') {
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  }
+});
+window.addEventListener('error', e => dlog('err','window.error', { msg:e.message, src:e.filename, line:e.lineno, col:e.colno }));
+window.addEventListener('unhandledrejection', e => dlog('err','unhandledrejection', { reason: (e.reason && (e.reason.stack||e.reason.message)) || String(e.reason) }));
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (DEBUG) panel.style.display='block';
+  fetchCsrf().catch(err=>dlog('err','fetchCsrf init failed', String(err)));
+  loadRecaptcha().catch(err=>dlog('err','loadRecaptcha init failed', String(err)));
+});
+
+googleBtn.onclick = () => { location.href = '/auth/google'; };
+
+function setLoading(loading){
+  if (loading){
+    loginBtn.disabled = true;
+    googleBtn.disabled = true;
+    btnLabel.innerHTML = '<span class="spinner" aria-hidden="true"></span>';
+  } else {
+    loginBtn.disabled = false;
+    googleBtn.disabled = false;
+    btnLabel.textContent = 'Login';
+  }
+}
+
+function showError(msg){
+  formError.textContent = msg || 'Login failed.';
+  formError.style.display = 'block';
+}
+
+loginForm.onsubmit = function(e){
+  e.preventDefault();
+  (async () => {
+    const tStart = performance.now();
+    formError.style.display = 'none';
+    setLoading(true);
+    try {
+      const siteKey = await loadRecaptcha();
+      const emailEl = document.getElementById('email');
+      const passEl = document.getElementById('password');
+
+      dlog('log','Submit clicked',{
+        email_preview: (emailEl.value||'').replace(/(.{2}).*(@.*)/,'$1…$2'),
+        password_length: (passEl.value||'').length
+      });
+
+      const recaptchaToken = await getRecaptchaToken(siteKey, 'login');
+
+      const payload = {
+        email: emailEl.value,
+        password: passEl.value,
+        recaptchaToken
+      };
+
+      const { res, json, text } = await postJSON('/api/login', payload);
+
+      // check session status after response
+      const st = await fetch('/api/status', { credentials:'include' })
+                    .then(r=>r.json()).catch(()=>({}));
+      dlog('log','/api/status after login', st);
+
+      if (!res.ok) {
+        const hint = [
+          '• reCAPTCHA could have failed (low score or action mismatch).',
+          '• Email/password invalid, or account not verified.',
+          '• CSRF token stale (we auto-refresh once).'
+        ].join('\n');
+        dlog('warn','Login failed summary', { status: res.status, body: json||text, hints: hint });
+        showError((json && (json.message||json.error)) || 'Invalid credentials or verification required.');
+        throw new Error('login_failed');
+      }
+
+      dlog('ok','Login success', json);
+      dtime('Total login flow', tStart);
+      location.href='index.html';
+    } catch (err) {
+      dlog('err','Login exception', (err && (err.stack||err.message)) || String(err));
+      if (formError.style.display !== 'block') showError('Login failed.');
+    } finally {
+      setLoading(false);
+    }
+  })();
+};
+</script>
+</body>
+</html>

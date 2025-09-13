@@ -1,0 +1,2086 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base href="/">
+<title>GameCore - Multi-File Game Creator with AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://unpkg.com/modern-normalize/modern-normalize.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+:root{
+  --bg: #0a0716;
+  --bg-2: #0f0a20;
+  --surface: rgba(28, 19, 46, 0.7);
+  --surface-strong: rgba(33, 23, 55, 0.9);
+  --border: rgba(255,255,255,0.08);
+  --text: #EAE6F5;
+  --muted: #A7A0C1;
+  --accent: #8b5cf6;
+  --accent-2: #22d3ee;
+  --success: #47c65a;
+  --error: #ef4444;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,.45), 0 2px 10px rgba(0,0,0,.3);
+  --glass: blur(10px) saturate(120%);
+  --transition: 220ms cubic-bezier(.2,.6,.2,1);
+}
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #3b1a6d33 0%, transparent 55%),
+    radial-gradient(1000px 700px at 120% 10%, #1d2a8a33 0%, transparent 60%),
+    radial-gradient(700px 600px at 60% 120%, #6d28d933 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+
+.header{
+  background: linear-gradient(180deg, rgba(18,12,34,.85), rgba(18,12,34,.70));
+  color: var(--text);
+  padding: 12px 20px;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  position: sticky; top: 0; z-index: 50;
+}
+
+.logo-container{
+  display: flex; align-items: center; gap: 10px;
+}
+
+.logo-container img {
+  height: 32px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.3));
+}
+
+#edit-panel label{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  font-size:13px;
+  color: var(--muted);
+}
+
+#edit-panel select{
+  width: 100%;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+  appearance: none;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0)),
+    url("data:image/svg+xml;utf8,<svg fill='white' opacity='.85' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat, no-repeat;
+  background-position: 0 0, right 10px center;
+  background-size: auto, 18px;
+  padding-right: 36px;
+}
+#edit-panel select:focus{
+  border-color: rgba(139,92,246,.6);
+  box-shadow: 0 0 0 6px rgba(139,92,246,.12);
+}
+
+.choices,
+.choices__inner {
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  color: var(--text);
+  box-shadow: none;
+}
+.choices__list--dropdown,
+.choices__list[aria-expanded] {
+  background: #0f0a23;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
+}
+.choices__list--dropdown .choices__item--selectable { color: var(--text); }
+.choices__list--dropdown .choices__item--selectable.is-highlighted,
+.choices__list--dropdown .choices__item--selectable:hover,
+.choices__list--dropdown .choices__item--choice.is-highlighted{
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+.choices__placeholder { color: var(--muted) !important; }
+.choices.is-focused .choices__inner,
+.choices.is-open .choices__inner {
+  border-color: rgba(139,92,246,.6) !important;
+  box-shadow: 0 0 0 6px rgba(139,92,246,.12);
+}
+
+.logo {
+  font-size: 18px; font-weight: 700; letter-spacing: .2px;
+  line-height: 1;
+}
+
+.menu-toggle{
+  cursor: pointer; font-size: 22px; opacity: .9;
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.06);
+  margin-right: 10px;
+}
+.menu-toggle:hover{ opacity: 1; }
+
+.nav a{
+  position: relative; color: var(--text); text-decoration: none; margin-left: 18px; font-weight: 500; opacity: .9;
+  transition: opacity var(--transition);
+}
+.nav a::after{
+  content: ""; position: absolute; left: 0; bottom: -8px; width: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 2px;
+  transition: width var(--transition);
+}
+.nav a:hover{ opacity: 1; }
+.nav a:hover::after{ width: 100%; }
+
+.header { flex-wrap: wrap; }
+
+.top-right-buttons{
+  display:flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  max-width: 100%;
+}
+
+@media (max-width: 900px){
+  /* let the buttons occupy their own row on smaller screens */
+  .top-right-buttons{
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+
+/* buttons (global) */
+button, .btn, .top-right-buttons button {
+  appearance: none; border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(139,92,246,.22), rgba(34,211,238,.18));
+  color: var(--text); border-radius: 12px; padding: 10px 14px; font-weight: 600;
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition), opacity var(--transition);
+  box-shadow: 0 6px 18px rgba(139,92,246,.18);
+}
+.top-right-buttons button:hover,
+button:hover{ transform: translateY(-1px); box-shadow: 0 12px 28px rgba(139,92,246,.28); }
+button:disabled{ opacity: .55; pointer-events: none; }
+
+button.primary { background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: #fff; box-shadow: 0 10px 28px rgba(109,40,217,.45); }
+button.primary:hover{ box-shadow: 0 14px 36px rgba(109,40,217,.55); transform: translateY(-1px); }
+button.danger { background: linear-gradient(180deg, rgba(239,68,68,.85), rgba(190,23,23,.75)); color:#fff; }
+
+/* main split layout */
+.main-container{ display: flex; flex: 1; overflow: hidden; gap: 15px; padding: 15px; }
+
+/* cards */
+.editor-container, .preview-container, .file-explorer, #edit-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+}
+
+/* file explorer */
+.file-explorer{
+  width: 260px; min-width: 220px;
+  padding: 14px; overflow-y: auto;
+}
+.button-container{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+#upload-file-btn{ grid-column: 1 / -1; }
+#upload-file-btn img{ width: 15px; height: 15px; filter: invert(1); }
+
+/* file and dir items */
+.file-item, .directory-item{
+  cursor: pointer; padding: 10px 12px; margin-bottom: 6px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+  display: flex; align-items: center; gap: 8px; transition: transform var(--transition), background var(--transition), border-color var(--transition);
+}
+.file-item:hover, .directory-item:hover{ transform: translateX(2px); border-color: rgba(139,92,246,.35); }
+.file-item.active{
+  background: linear-gradient(135deg, rgba(139,92,246,.35), rgba(34,211,238,.25));
+  border-color: rgba(139,92,246,.5);
+}
+.file-item .file-name{ overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: calc(100% - 24px); position: relative; }
+.file-item .file-name.long:after{
+  content: ''; position: absolute; top: 0; right: 0; width: 30px; height: 100%;
+  background: linear-gradient(to right, rgba(51, 51, 51, 0) 0%, rgba(19,12,35,.9) 100%);
+  pointer-events: none;
+}
+.directory-children{ margin-left: 14px; }
+.dots{ margin-left: auto; opacity: .9; } .dots:hover{ opacity: 1; }
+
+/* editor column */
+.editor-container{
+  flex: 0.8; display: flex; flex-direction: column; position: relative; overflow: hidden;
+  padding-bottom: 60px;
+}
+#editor{ flex: 1; font-size: 14px; }
+
+/* bottom controls bar (always visible) */
+.controls{
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.72));
+  border-top: 1px solid var(--border);
+  backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
+  z-index: 10;
+}
+.controls > div{ display: flex; gap: 6px; }
+.controls > div{ flex: 0 0 auto; }
+.controls button{ flex: 0 0 40px; }
+.controls select{ flex: 0 0 auto; }
+.controls button{ width: 40px; height: 40px; padding: 0; }
+select#active-html-select{
+  min-width: 220px;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  color: var(--text); outline: none; transition: border-color var(--transition), box-shadow var(--transition);
+}
+select#active-html-select:focus{ border-color: rgba(139,92,246,.6); box-shadow: 0 0 0 6px rgba(139,92,246,.12); }
+
+/* dark dropdown panel */
+select#active-html-select option,
+#theme-select option, #font-family-select option, #theme-select optgroup {
+  background-color: #0f0a23; color: var(--text);
+}
+select#active-html-select option:hover,
+#theme-select option:hover, #font-family-select option:hover{
+  background: #ffffff; color: #000000;
+}
+
+#image-preview, .audio-video-preview{
+  flex: 1; display: none; justify-content: center; align-items: center; flex-direction: column; position: relative; padding: 18px;
+  background: linear-gradient(180deg, rgba(17,11,34,.85), rgba(17,11,34,.75));
+}
+.toolbar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  position:absolute;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:5;
+  padding:8px;
+  border-radius:10px;
+  background:rgba(19,12,35,.7);
+  border:1px solid var(--border);
+  backdrop-filter:var(--glass);
+  max-width:calc(100% - 20px);
+  justify-content:center;
+}
+.toolbar button{ background: rgba(139,92,246,.25); border:1px solid var(--border); }
+.toolbar button:hover{ transform: translateY(-1px); }
+.toolbar input[type="color"], .toolbar input[type="range"]{
+  background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 2px;
+}
+
+#canvas{ border: 1px solid var(--border); }
+
+/* html reference */
+.html-reference{ margin-top: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+#html-filename{
+  width: 90%; min-height: 56px; resize: none; padding: 10px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+}
+#copy-filename-btn{ min-width: 160px; }
+
+/* preview panel */
+.preview-container{
+  flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; padding-bottom: 0;
+}
+#preview{
+  display:block;
+  width:100%; height:100%;
+  contain: strict;
+  isolation: isolate;
+  will-change: transform;
+  transform: translateZ(0);
+  background: #ffffff;
+}
+
+body.perf { --glass: none; }
+body.perf .header,
+body.perf .editor-container,
+body.perf .file-explorer,
+body.perf #edit-panel,
+body.perf .preview-container{
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+.fullscreen-btn{
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(19,12,35,.7); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px; cursor: pointer; z-index: 5;
+}
+
+/* console */
+#console{
+  height: 200px; background: linear-gradient(180deg, rgba(17,11,34,.9), rgba(17,11,34,.8));
+  color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  padding: 14px; overflow-y: auto; border-top: 1px solid var(--border);
+}
+.log{ margin-bottom: 6px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.03); }
+.error{ color: #ffb4b4; background: rgba(239,68,68,.1); }
+.warn{ color: #ffd48a; background: rgba(234,179,8,.12); }
+.info{ color: #a0d8ff; background: rgba(59,130,246,.12); }
+
+/* menus (context) */
+.menu{
+  position: absolute; display: none; z-index: 1000;
+  background: var(--surface-strong); border: 1px solid var(--border); border-radius: 12px;
+  min-width: 180px; box-shadow: var(--shadow); overflow: hidden;
+}
+.menu-item{
+  padding: 10px 12px; cursor: pointer; transition: background var(--transition);
+}
+.menu-item:hover{ background: rgba(139,92,246,.18); }
+
+#mode-menu{
+  position: fixed;
+  top: 60px; left: 16px;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: var(--shadow);
+  z-index: 9999;
+  /* animation state */
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-6px) scale(.98);
+  pointer-events: none;
+  transition: opacity var(--transition), transform var(--transition), visibility 0s linear .22s;
+}
+
+#mode-menu.open{
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  transition: opacity var(--transition), transform var(--transition);
+}
+
+/* modal backdrop */
+.modal-backdrop{
+  position: fixed; inset: 0;
+  background: rgba(10,7,22,.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 900;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity var(--transition), visibility 0s linear .22s;
+}
+.modal-backdrop.open{
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity var(--transition);
+}
+
+.settings-popup, .confirmation-popup { padding-right: 56px; }
+.settings-popup h2, .confirmation-popup h3 { margin-right: 12px; }
+
+/* popups */
+.settings-popup, .confirmation-popup{
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%) translateY(8px) scale(.98);
+  background: var(--surface-strong); color: var(--text);
+  padding: 18px; border-radius: 16px; border: 1px solid var(--border);
+  width: min(92vw, 360px);
+  box-shadow: var(--shadow); z-index: 1001;
+
+  /* closed state */
+  opacity: 0; visibility: hidden;
+  transition: opacity var(--transition), transform var(--transition), visibility 0s linear .22s;
+}
+.settings-popup.open, .confirmation-popup.open{
+  opacity: 1; visibility: visible;
+  transform: translate(-50%, -50%) translateY(0) scale(1);
+  transition: opacity var(--transition), transform var(--transition);
+}
+.settings-popup h2{ margin: 0 0 12px 0; }
+.settings-popup label, .confirmation-popup h3{ color: var(--text); }
+.settings-popup select, .settings-popup input[type="text"], .settings-popup input[type="range"]{
+  width: 100%; margin-top: 6px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 10px 12px;
+}
+
+.settings-popup .close-btn,
+.confirmation-popup .close-btn{
+  position:absolute;
+  top:-6px;
+  right:2px;
+  width:28px; height:28px; line-height:28px; padding:0;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background: rgba(255,255,255,.06);
+}
+.confirmation-popup{ text-align: center; }
+.confirmation-popup button{ margin-top: 14px; }
+
+#mode-menu{ background: var(--surface-strong); }
+#mode-menu button { width: 100%; }
+#mode-menu { background-color: #1a1530; }
+
+.input-popup{
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%) translateY(8px) scale(.98);
+  background: var(--surface-strong); color: var(--text);
+  padding: 18px; border-radius: 16px; border: 1px solid var(--border);
+  width: min(92vw, 420px);
+  box-shadow: var(--shadow); z-index: 1001;
+
+  opacity: 0; visibility: hidden;
+  transition: opacity var(--transition), transform var(--transition), visibility 0s linear .22s;
+}
+.input-popup.open{
+  opacity: 1; visibility: visible;
+  transform: translate(-50%, -50%) translateY(0) scale(1);
+  transition: opacity var(--transition), transform var(--transition);
+}
+.input-popup h3{ margin: 0 0 10px 0; }
+
+.input-popup input[type="text"]{
+  width: 100%; margin-top: 8px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 10px 12px;
+}
+
+.input-actions{
+  display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px;
+}
+
+/* eeuse close button styling from other popups */
+.input-popup .close-btn{
+  position:absolute; top:-6px; right:2px;
+  width:28px; height:28px; line-height:28px; padding:0;
+  border-radius:8px; border:1px solid var(--border);
+  background: rgba(255,255,255,.06);
+}
+
+
+/* edit side panel */
+#edit-panel{
+  display: none; flex-direction: column; padding: 14px; width: 320px;
+}
+#edit-panel textarea{
+  flex: 1; min-height: 220px;
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px; resize: vertical;
+}
+#edit-loading{ color: var(--muted); margin: 8px 0; display: none; }
+
+/* overlays */
+.loading-overlay{
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(3,2,8,.55); color: #fff; font-size: 20px; z-index: 200;
+  backdrop-filter: blur(2px);
+}
+
+/* scrollbars (WebKit) */
+*::-webkit-scrollbar{ width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb{ background: rgba(139,92,246,.35); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-track{ background: transparent; }
+
+/* selection */
+::selection{ background: rgba(139,92,246,.35); color: #fff; }
+
+/* responsive */
+@media (max-width: 1100px){
+  .main-container{ gap: 12px; padding: 12px; }
+  .file-explorer{ display: none; }
+  #edit-panel{ display: none; }
+}
+
+</style>
+</head>
+<body>
+  <div class="header">
+      <div style="display:flex;align-items:center">
+          <div class="menu-toggle" id="menu-toggle">&#9776;</div>
+          <div class="logo-container">
+              <img src="images/gamecore.png" alt="logo">
+              <div class="logo">GameCore</div>
+          </div>
+      </div>
+      <div class="nav">
+      <a href="/home">Home</a>
+      <a href="/editor">Editor</a>
+      <a href="/suggestions">Suggestions</a>
+      </div>
+      <div class="top-right-buttons">
+          <button id="download-project-btn">⬇ Download Project</button>
+          <button id="import-zip-btn">📂 Import Zip Project</button>
+          <button id="settings-btn">⚙ Settings</button>
+          <button id="profile-link">&#128100;</button>
+      </div>
+  </div>
+  <div id="mode-menu">
+      <button id="files-mode">Files</button>
+      <button id="edit-mode">Edit Code</button>
+  </div>
+  <div class="main-container">
+      <div class="file-explorer" id="file-explorer">
+          <div class="button-container">
+              <button id="add-file-btn">Add File</button>
+              <button id="add-folder-btn">Add Folder</button>
+              <input type="file" id="file-input" multiple style="display:none;">
+              <button id="upload-file-btn">⬆ Upload</button>
+          </div>
+          <div id="file-list"></div>
+      </div>
+          <div id="edit-panel">
+          <textarea id="edit-prompt" placeholder="Describe changes..."></textarea>
+
+          <label style="margin-top:10px">
+              Model:
+              <select id="edit-model-select">
+              <option value="claude-opus-4-1">Claude Opus 4.1</option>
+              <option value="claude-sonnet-4">Claude Sonnet 4</option>
+              <option value="gpt-5">GPT-5</option>
+              <option value="gpt-4.1">GPT-4.1</option>
+              <option value="o3">GPT-o3</option>
+              </select>
+          </label>
+
+          <div id="edit-loading">Loading...</div>
+          <button id="edit-btn">Edit</button>
+      </div>
+      <div class="editor-container">
+          <div class="controls">
+              <div style="display: flex; gap: 5px;">
+                  <button id="run-btn" class="primary">▶</button>
+                  <button id="save-btn" class="">💾</button>
+                  <button id="delete-file-btn" class="danger">🗑️</button>
+                  <button id="clear-console-btn" class="">🧹</button>
+              </div>
+              <select id="active-html-select" style="margin-right: 10px;"></select>
+          </div>
+          <div id="editor"></div>
+          
+          <div id="image-preview">
+              <div class="toolbar">
+                  <button id="crop-btn">Crop</button>
+                  <input type="color" id="color-picker" value="#ff0000">
+                  <input type="range" id="stroke-width" min="1" max="10" value="2">
+                  <button id="pencil-btn">Pencil</button>
+                  <button id="eraser-btn">Eraser</button>
+                  <button id="undo-btn">Undo</button>
+                  <button id="redo-btn">Redo</button>
+                  <button id="zoom-in-btn">Zoom In</button>
+                  <button id="zoom-out-btn">Zoom Out</button>
+                  <button id="save-image-btn">Save</button>
+              </div>
+              <canvas id="canvas"></canvas>
+              <div class="html-reference">
+                  <textarea id="html-filename" readonly></textarea>
+                  <button id="copy-filename-btn">Copy HTML Code</button>
+              </div>
+          </div>
+          <div class="audio-video-preview" id="audio-video-preview">
+              <audio id="audio-player" controls></audio>
+              <video id="video-player" controls></video>
+              <div class="html-reference">
+                  <textarea id="html-filename" readonly></textarea>
+                  <button id="copy-filename-btn">Copy HTML Code</button>
+              </div>
+          </div>
+          
+      </div>
+      <div class="preview-container" id="preview-container">
+          <iframe id="preview" tabindex="-1"></iframe>
+          <button class="fullscreen-btn" id="fullscreen-btn" tabindex="-1">⛶</button>
+          <button class="fullscreen-btn" id="popout-btn" tabindex="-1" style="right:58px">↗</button>
+          <div id="console"></div>
+          <div id="apk-loading" class="loading-overlay" style="display:none">Building APK...</div>
+      </div>
+  </div>
+
+  <div id="file-menu" class="menu">
+      <div id="rename-file" class="menu-item">Rename</div>
+      <div id="duplicate-file" class="menu-item">Duplicate</div>
+      <div id="delete-file" class="menu-item">Delete</div>
+  </div>
+  <div id="dir-menu" class="menu">
+      <div id="rename-dir" class="menu-item">Rename</div>
+      <div id="duplicate-dir" class="menu-item">Duplicate</div>
+      <div id="delete-dir" class="menu-item">Delete</div>
+  </div>
+
+    <!-- settings popup -->
+<div id="settings-popup" class="settings-popup">
+  <h2>Settings</h2>
+  <button class="close-btn" id="close-settings-btn">X</button>
+  <label>
+      Font Size:
+      <input type="range" id="font-size-slider" min="10" max="20" value="14">
+  </label>
+  <label>
+      Theme:
+      <select id="theme-select">
+          <optgroup label="Light Themes">
+              <option value="ace/theme/chrome">Chrome</option>
+              <option value="ace/theme/clouds">Clouds</option>
+              <option value="ace/theme/crimson_editor">Crimson Editor</option>
+              <option value="ace/theme/dawn">Dawn</option>
+              <option value="ace/theme/dreamweaver">Dreamweaver</option>
+              <option value="ace/theme/eclipse">Eclipse</option>
+              <option value="ace/theme/github">GitHub</option>
+              <option value="ace/theme/iplastic">IPlastic</option>
+              <option value="ace/theme/katzenmilch">KatzenMilch</option>
+              <option value="ace/theme/kuroir">Kuroir</option>
+              <option value="ace/theme/solarized_light">Solarized Light</option>
+              <option value="ace/theme/sqlserver">SQL Server</option>
+              <option value="ace/theme/textmate">TextMate</option>
+              <option value="ace/theme/tomorrow">Tomorrow</option>
+              <option value="ace/theme/xcode">XCode</option>
+          </optgroup>
+          <optgroup label="Dark Themes">
+              <option value="ace/theme/ambiance">Ambiance</option>
+              <option value="ace/theme/chaos">Chaos</option>
+              <option value="ace/theme/clouds_midnight">Clouds Midnight</option>
+              <option value="ace/theme/cobalt">Cobalt</option>
+              <option value="ace/theme/dracula">Dracula</option>
+              <option value="ace/theme/gob">Green on Black</option>
+              <option value="ace/theme/gruvbox">Gruvbox</option>
+              <option value="ace/theme/idle_fingers">idle Fingers</option>
+              <option value="ace/theme/kr_theme">krTheme</option>
+              <option value="ace/theme/merbivore">Merbivore</option>
+              <option value="ace/theme/merbivore_soft">Merbivore Soft</option>
+              <option value="ace/theme/mono_industrial">Mono Industrial</option>
+              <option value="ace/theme/monokai">Monokai</option>
+              <option value="ace/theme/pastel_on_dark">Pastel on Dark</option>
+              <option value="ace/theme/solarized_dark">Solarized Dark</option>
+              <option value="ace/theme/terminal">Terminal</option>
+              <option value="ace/theme/tomorrow_night">Tomorrow Night</option>
+              <option value="ace/theme/tomorrow_night_blue">Tomorrow Night Blue</option>
+              <option value="ace/theme/tomorrow_night_bright">Tomorrow Night Bright</option>
+              <option value="ace/theme/tomorrow_night_eighties">Tomorrow Night 80s</option>
+              <option value="ace/theme/twilight">Twilight</option>
+              <option value="ace/theme/vibrant_ink">Vibrant Ink</option>
+          </optgroup>
+      </select>
+  </label>
+  <label>
+      Font Family:
+      <select id="font-family-select">
+          <option value="monospace">Monospace</option>
+          <option value="'Roboto', sans-serif">Roboto</option>
+          <option value="'Open Sans', sans-serif">Open Sans</option>
+          <option value="'Lato', sans-serif">Lato</option>
+          <option value="'Montserrat', sans-serif">Montserrat</option>
+          <option value="'Oswald', sans-serif">Oswald</option>
+          <option value="'Raleway', sans-serif">Raleway</option>
+          <option value="'Poppins', sans-serif">Poppins</option>
+          <option value="'Ubuntu', sans-serif">Ubuntu</option>
+          <option value="'Nunito', sans-serif">Nunito</option>
+          <option value="'Rubik', sans-serif">Rubik</option>
+          <option value="'Merriweather', serif">Merriweather</option>
+          <option value="'Indie Flower', cursive">Indie Flower</option>
+          <option value="'Inconsolata', monospace">Inconsolata</option>
+          <option value="'Playfair Display', serif">Playfair Display</option>
+          <option value="'Pacifico', cursive">Pacifico</option>
+          <option value="'Arvo', serif">Arvo</option>
+          <option value="'Fira Sans', sans-serif">Fira Sans</option>
+          <option value="'Zilla Slab', serif">Zilla Slab</option>
+          <option value="'Work Sans', sans-serif">Work Sans</option>
+          <option value="'Lobster', cursive">Lobster</option>
+          <option value="'Source Sans Pro', sans-serif">Source Sans Pro</option>
+      </select>
+  </label>
+  <label>
+      Project Name:
+      <input type="text" id="zip-filename" placeholder="Enter filename">
+  </label>
+  <label>
+      Python Dependencies:
+      <input type="text" id="python-deps" placeholder="e.g. pygame, numpy">
+  </label>
+</div>
+  
+<div id="input-popup" class="input-popup">
+  <h3 id="input-popup-title">Title</h3>
+  <button class="close-btn" id="close-input-btn">X</button>
+
+  <label id="input-popup-label" for="input-popup-input" style="display:block;margin-top:8px;">Label</label>
+  <input type="text" id="input-popup-input" placeholder="" />
+
+  <div class="input-actions">
+      <button id="input-popup-confirm" class="primary">OK</button>
+      <button id="input-popup-cancel">Cancel</button>
+  </div>
+</div>
+<!-- confirmation popup -->
+<div id="confirmation-popup" class="confirmation-popup">
+    <h3>Are you sure you want to import a new project? This will remove all existing files.</h3>
+    <button id="confirm-btn">Yes</button>
+    <button id="cancel-btn">No</button>
+    <button class="close-btn" id="close-confirmation-btn">X</button>
+</div>
+
+<!-- unsupported file type popup -->
+<div id="unsupported-popup" class="confirmation-popup">
+    <h3>Unsupported file type! Supported file types are: .png, .jpg, .jpeg, .gif, .mp3, .wav, .ogg, .mp4, .webm, .mov</h3>
+    <button id="add-anyway-btn">Add Anyway</button>
+    <button id="cancel-upload-btn">Cancel</button>
+</div>
+
+<div id="modal-backdrop" class="modal-backdrop"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ext-language_tools.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ext-error_marker.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+<script>
+let CSRF_TOKEN = null;
+
+async function fetchCsrf() {
+const res = await fetch('/api/csrf-token', { credentials: 'include' });
+const data = await res.json();
+CSRF_TOKEN = data.csrfToken;
+return CSRF_TOKEN;
+}
+
+async function csrfFetch(url, init = {}, retry = true) {
+if (!CSRF_TOKEN) await fetchCsrf();
+
+const method = (init.method || 'GET').toUpperCase();
+const headers = new Headers(init.headers || {});
+if (method !== 'GET' && method !== 'HEAD') {
+    headers.set('x-csrf-token', CSRF_TOKEN);
+    if (!(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+    }
+}
+
+const res = await fetch(url, { credentials: 'include', ...init, headers });
+
+if (res.status === 403 && retry) {
+    // token gone :(
+    CSRF_TOKEN = null;
+    await fetchCsrf();
+    return csrfFetch(url, init, false);
+}
+if (res.status === 401) {
+    // not logged in
+    location.href = 'login.html';
+}
+return res;
+}
+
+const postJSON = (url, body) =>
+csrfFetch(url, { method: 'POST', body: JSON.stringify(body || {}) });
+
+document.addEventListener('DOMContentLoaded', () => {
+fetchCsrf().catch(console.error);
+});
+const editor = ace.edit("editor");
+editor.setTheme("ace/theme/monokai");
+editor.setOptions({
+    fontSize: "14px",
+    showPrintMargin: false,
+    highlightActiveLine: false,
+    enableLiveAutocompletion: true,
+    enableSnippets: true,
+    enableBasicAutocompletion: true
+});
+
+editor.session.on('change', () => markDirty(currentFile));
+
+// perf mode so preview doesnt decide to go to sleep
+function enterPerf(){
+  document.body.classList.add('perf');
+  editor.setOptions({
+    enableLiveAutocompletion: false,
+    enableBasicAutocompletion: false,
+    enableSnippets: false
+  });
+  editor.session.setUseWorker(false);
+}
+function exitPerf(){
+  document.body.classList.remove('perf');
+  editor.setOptions({
+    enableLiveAutocompletion: true,
+    enableBasicAutocompletion: true,
+    enableSnippets: true
+  });
+  // turn back on only when you need to edit the script again
+  editor.session.setUseWorker(true);
+}
+
+editor.on('focus', exitPerf);
+editor.on('blur',  enterPerf);
+
+// auto-enter perf any time the game is interacted with or reloaded
+
+const runBtn = document.getElementById('run-btn');
+const saveBtn = document.getElementById('save-btn');
+const deleteFileBtn = document.getElementById('delete-file-btn');
+const addFileBtn = document.getElementById('add-file-btn');
+const addFolderBtn = document.getElementById('add-folder-btn');
+const uploadFileBtn = document.getElementById('upload-file-btn');
+const fileInput = document.getElementById('file-input');
+const clearConsoleBtn = document.getElementById('clear-console-btn');
+const fileMenu = document.getElementById('file-menu');
+const renameFileMenu = document.getElementById('rename-file');
+const duplicateFileMenu = document.getElementById('duplicate-file');
+const deleteFileMenu = document.getElementById('delete-file');
+const dirMenu = document.getElementById('dir-menu');
+const renameDirMenu = document.getElementById('rename-dir');
+const duplicateDirMenu = document.getElementById('duplicate-dir');
+const deleteDirMenu = document.getElementById('delete-dir');
+const preview = document.getElementById('preview');
+const consoleOutput = document.getElementById('console');
+const fileList = document.getElementById('file-list');
+const activeHtmlSelect = document.getElementById('active-html-select');
+const imagePreview = document.getElementById('image-preview');
+const audioVideoPreview = document.getElementById('audio-video-preview');
+const htmlFilename = document.getElementById('html-filename');
+const copyFilenameBtn = document.getElementById('copy-filename-btn');
+const downloadProjectBtn = document.getElementById('download-project-btn');
+const importZipBtn = document.getElementById('import-zip-btn');
+const settingsBtn = document.getElementById('settings-btn');
+const settingsPopup = document.getElementById('settings-popup');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+const fontSizeSlider = document.getElementById('font-size-slider');
+const themeSelect = document.getElementById('theme-select');
+const fontFamilySelect = document.getElementById('font-family-select');
+const inputPopup = document.getElementById('input-popup');
+const inputPopupTitle = document.getElementById('input-popup-title');
+const inputPopupLabel = document.getElementById('input-popup-label');
+const inputPopupInput = document.getElementById('input-popup-input');
+const inputPopupOk = document.getElementById('input-popup-confirm');
+const inputPopupCancel = document.getElementById('input-popup-cancel');
+const closeInputBtn = document.getElementById('close-input-btn');
+const editModelSelect = document.getElementById('edit-model-select');
+const popoutBtn = document.getElementById('popout-btn');
+const zipFilenameInput = document.getElementById('zip-filename');
+const pythonDepsInput = document.getElementById('python-deps');
+const confirmationPopup = document.getElementById('confirmation-popup');
+const confirmBtn = document.getElementById('confirm-btn');
+const cancelBtn = document.getElementById('cancel-btn');
+const closeConfirmationBtn = document.getElementById('close-confirmation-btn');
+const unsupportedPopup = document.getElementById('unsupported-popup');
+const addAnywayBtn = document.getElementById('add-anyway-btn');
+const cancelUploadBtn = document.getElementById('cancel-upload-btn');
+const fullscreenBtn = document.getElementById('fullscreen-btn');
+const previewContainer = document.getElementById('preview-container');
+const menuToggleBtn = document.getElementById('menu-toggle');
+const modeMenu = document.getElementById('mode-menu');
+const editPanel = document.getElementById('edit-panel');
+const filesMode = document.getElementById('files-mode');
+const editMode = document.getElementById('edit-mode');
+const editBtn = document.getElementById('edit-btn');
+const editPrompt = document.getElementById('edit-prompt');
+const editLoading = document.getElementById('edit-loading');
+const projectOptions = JSON.parse(localStorage.getItem('projectOptions') || '{}');
+
+popoutBtn.onclick = async () => {
+  const fileToRun = activeHtmlFile || 'index.html';
+  try {
+    const r = await postJSON('/api/preview-url', { file: fileToRun });
+    const { url } = await r.json();
+    if (!url) throw new Error('No preview url');
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (e) {
+    log('Unable to open preview window.', 'error');
+  }
+};
+
+['pointerenter','pointerdown'].forEach(ev => preview.addEventListener(ev, enterPerf));
+preview.addEventListener('load', enterPerf);
+
+let inputPopupOnConfirm = null;
+
+fileList.addEventListener('dragover', (e) => {
+    e.preventDefault();
+});
+fileList.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (draggedPath) {
+        const src = draggedPath.replace(/\/$/, '');
+        moveFile(src, null);
+    }
+});
+
+pythonDepsInput.value = projectOptions.pythonDependencies || '';
+pythonDepsInput.addEventListener('input', () => {
+    projectOptions.pythonDependencies = pythonDepsInput.value;
+    localStorage.setItem('projectOptions', JSON.stringify(projectOptions));
+});
+
+// koad stored model
+if (projectOptions.model) {
+  editModelSelect.value = projectOptions.model;
+} else {
+  // set a default if not present
+  editModelSelect.value = 'gpt-4.1';
+  projectOptions.model = 'gpt-4.1';
+  localStorage.setItem('projectOptions', JSON.stringify(projectOptions));
+}
+
+// persist on change
+editModelSelect.addEventListener('change', () => {
+  projectOptions.model = editModelSelect.value;
+  localStorage.setItem('projectOptions', JSON.stringify(projectOptions));
+});
+
+
+let files = {};
+let directories = [];
+let expandedDirs = new Set();
+let selectedDirectory = null;
+let currentFile = null;
+let activeHtmlFile = null;
+let selectedFile = null;
+let selectedDirForMenu = null;
+let unsupportedFile = null;
+let draggedPath = null;
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+const baseCanvas = document.createElement('canvas');
+const baseCtx = baseCanvas.getContext('2d');
+let drawing = false;
+let startX, startY, endX, endY;
+let currentTool = 'pencil';
+let color = '#ff0000';
+let strokeWidth = 2;
+let zoom = 1;
+let history = [];
+let historyIndex = -1;
+
+async function loadGeneratedFiles() {
+  try {
+    const resp = await csrfFetch('/files', { cache: 'no-store' });
+    const data = await resp.json();
+
+    files = {};
+    directories = [];
+
+    data.forEach(f => {
+      const p = (f.path || '').replace(/\\/g, '/');
+      if (!p) return;
+      if (f.directory) {
+        directories.push(p.replace(/\/$/, ''));
+      } else {
+        // ensure we always store a string for Ace
+        files[p] = (typeof f.content === 'string') ? f.content : '';
+      }
+    });
+
+    updateFileList();
+
+    // reload the previously open file if it still exists
+    if (currentFile && Object.prototype.hasOwnProperty.call(files, currentFile)) {
+      loadFile(currentFile);
+      return;
+    }
+
+    // prefer index.html if present
+    if (Object.prototype.hasOwnProperty.call(files, 'index.html')) {
+      activeHtmlFile = 'index.html';
+      loadFile('index.html');
+      return;
+    }
+
+    // otherwise pick the first HTML file, then anything
+    const firstHtml = Object.keys(files).find(f => f.toLowerCase().endsWith('.html'));
+    if (firstHtml) {
+      activeHtmlFile = firstHtml;
+      loadFile(firstHtml);
+    } else {
+      const firstAny = Object.keys(files)[0];
+      if (firstAny) loadFile(firstAny);
+    }
+  } catch (e) {
+    console.error('Failed to load files', e);
+  }
+}
+
+loadGeneratedFiles();
+
+const placeModeMenu = () => {
+const r = menuToggleBtn.getBoundingClientRect();
+modeMenu.style.left = Math.round(r.left) + 'px';
+modeMenu.style.top = Math.round(r.bottom + 8) + 'px';
+};
+
+const closeModeMenuOnce = (ev) => {
+if (!modeMenu.contains(ev.target) && ev.target !== menuToggleBtn) {
+    modeMenu.classList.remove('open');
+    document.removeEventListener('click', closeModeMenuOnce);
+}
+};
+
+menuToggleBtn.onclick = (e) => {
+e.stopPropagation();
+placeModeMenu();
+modeMenu.classList.toggle('open');
+if (modeMenu.classList.contains('open')) {
+    document.addEventListener('click', closeModeMenuOnce);
+}
+};
+window.addEventListener('resize', () => {
+if (modeMenu.classList.contains('open')) placeModeMenu();
+});
+
+// close after choosing a mode
+filesMode.onclick = () => {
+editPanel.style.display = 'none';
+fileExplorer.style.display = 'block';
+modeMenu.classList.remove('open');
+};
+
+editMode.onclick = () => {
+fileExplorer.style.display = 'none';
+editPanel.style.display = 'flex';
+modeMenu.classList.remove('open');
+};
+
+editBtn.onclick = async () => {
+  editLoading.style.display = 'block';
+  const prompt = editPrompt.value;
+
+  // use the dropdown’s selection
+  const chosenModel = (editModelSelect && editModelSelect.value) || projectOptions.model || 'gpt-4.1';
+
+  // keep projectOptions in sync
+  projectOptions.model = chosenModel;
+  localStorage.setItem('projectOptions', JSON.stringify(projectOptions));
+
+  try {
+    await postJSON('/edit-code', {
+      prompt,
+      model: chosenModel,
+      scriptMode: projectOptions.scriptMode || 'html-js-css',
+      imageOption: projectOptions.imageOption || 'default',
+      htmlFileOption: projectOptions.htmlFileOption || 'single',
+      htmlPageCount: projectOptions.htmlPageCount || 1
+    });
+    await loadGeneratedFiles();
+  } catch (e) {
+    console.error('edit failed', e);
+  }
+  editLoading.style.display = 'none';
+};
+
+function buildTree() {
+    const root = {};
+    directories.forEach(dir => {
+        const parts = dir.split('/');
+        let node = root;
+        for (const part of parts) {
+            node[part] = node[part] || { type: 'dir', children: {} };
+            node = node[part].children;
+        }
+    });
+    Object.keys(files).forEach(path => {
+        const parts = path.split('/');
+        let node = root;
+        for (let i = 0; i < parts.length - 1; i++) {
+            const part = parts[i];
+            node[part] = node[part] || { type: 'dir', children: {} };
+            node = node[part].children;
+        }
+        node[parts[parts.length - 1]] = { type: 'file' };
+    });
+    return root;
+}
+
+function renderTree(container, tree, base = '') {
+    Object.keys(tree).sort().forEach(key => {
+        const item = tree[key];
+        const fullPath = base ? `${base}/${key}` : key;
+        if (item.type === 'dir') {
+            const dirDiv = document.createElement('div');
+            dirDiv.classList.add('directory-item');
+            dirDiv.setAttribute('draggable', 'true');
+            dirDiv.dataset.path = fullPath;
+            const arrow = document.createElement('span');
+            arrow.textContent = expandedDirs.has(fullPath) ? '▼' : '▶';
+            arrow.style.marginRight = '5px';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = key;
+            dirDiv.appendChild(arrow);
+            dirDiv.appendChild(nameSpan);
+            const dots = document.createElement('span');
+            dots.classList.add('dots');
+            dots.textContent = '⋮';
+            dots.style.marginLeft = 'auto';
+            dots.onclick = (event) => {
+                event.stopPropagation();
+                showDirMenu(event, fullPath);
+            };
+            dirDiv.appendChild(dots);
+            dirDiv.onclick = () => {
+                if (expandedDirs.has(fullPath)) {
+                    expandedDirs.delete(fullPath);
+                } else {
+                    expandedDirs.add(fullPath);
+                }
+                selectedDirectory = fullPath;
+                updateFileList();
+            };
+            dirDiv.addEventListener('dragstart', (e) => {
+                draggedPath = fullPath + '/';
+                e.dataTransfer.setData('text/plain', draggedPath);
+            });
+            dirDiv.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+            dirDiv.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (!draggedPath) return;
+                const src = draggedPath.replace(/\/$/, ''); //regex
+                moveFile(src, fullPath);
+            });
+            container.appendChild(dirDiv);
+            if (expandedDirs.has(fullPath)) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.classList.add('directory-children');
+                container.appendChild(childrenContainer);
+                renderTree(childrenContainer, item.children, fullPath);
+            }
+        } else {
+            const fileItem = document.createElement('div');
+            fileItem.classList.add('file-item');
+            fileItem.setAttribute('draggable', 'true');
+            fileItem.dataset.path = fullPath;
+            const fileNameContainer = document.createElement('div');
+            fileNameContainer.classList.add('file-name');
+            fileNameContainer.textContent = key;
+            fileItem.appendChild(fileNameContainer);
+            fileItem.onclick = () => {
+                selectedDirectory = base;
+                loadFile(fullPath);
+            };
+            if (fullPath === currentFile) {
+                fileItem.classList.add('active');
+            }
+            const dots = document.createElement('span');
+            dots.classList.add('dots');
+            dots.textContent = '⋮';
+            dots.onclick = (event) => {
+                event.stopPropagation();
+                showMenu(event, fullPath);
+            };
+            fileItem.appendChild(dots);
+            fileItem.addEventListener('dragstart', (e) => {
+                draggedPath = fullPath;
+                e.dataTransfer.setData('text/plain', fullPath);
+            });
+            fileItem.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+            fileItem.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (draggedPath && draggedPath !== fullPath) {
+                    const destDir = base;
+                    const src = draggedPath.replace(/\/$/, '');
+                    moveFile(src, destDir);
+                }
+            });
+            container.appendChild(fileItem);
+
+            if (fileNameContainer.scrollWidth > fileNameContainer.clientWidth) {
+                fileNameContainer.classList.add('long');
+            }
+        }
+    });
+}
+
+function updateFileList() {
+    fileList.innerHTML = '';
+    const tree = buildTree();
+    renderTree(fileList, tree);
+    updateActiveHtmlSelect();
+}
+
+function showMenu(event, filename) {
+    selectedFile = filename;
+    fileMenu.style.display = 'block';
+    fileMenu.style.top = `${event.clientY}px`;
+    fileMenu.style.left = `${event.clientX}px`;
+    dirMenu.style.display = 'none';
+}
+
+function showDirMenu(event, dir) {
+    selectedDirForMenu = dir;
+    dirMenu.style.display = 'block';
+    dirMenu.style.top = `${event.clientY}px`;
+    dirMenu.style.left = `${event.clientX}px`;
+    fileMenu.style.display = 'none';
+}
+
+document.addEventListener('click', () => {
+    fileMenu.style.display = 'none';
+    dirMenu.style.display = 'none';
+});
+
+function openInputModal({ title, label, placeholder = '', defaultValue = '', confirmText = 'OK', onConfirm }) {
+  inputPopupTitle.textContent = title || 'Input';
+  inputPopupLabel.textContent = label || 'Value';
+  inputPopupInput.placeholder = placeholder;
+  inputPopupInput.value = defaultValue;
+  inputPopupOk.textContent = confirmText || 'OK';
+
+  inputPopupOnConfirm = () => {
+    const val = (inputPopupInput.value || '').trim();
+    if (!val) return; // keep modal open if empty
+    closeModal(inputPopup);
+    onConfirm && onConfirm(val);
+  };
+
+  // wire once per open
+  inputPopupOk.onclick = inputPopupOnConfirm;
+  inputPopupCancel.onclick = () => closeModal(inputPopup);
+  closeInputBtn.onclick = () => closeModal(inputPopup);
+
+  // submit with Enter
+  inputPopupInput.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      inputPopupOnConfirm && inputPopupOnConfirm();
+    }
+  };
+
+  openModal(inputPopup);
+  setTimeout(() => inputPopupInput.focus(), 0);
+}
+
+fullscreenBtn.addEventListener('mousedown', e => e.preventDefault());
+popoutBtn.addEventListener('mousedown', e => e.preventDefault());
+function refocusGameSoon() {
+  setTimeout(() => {
+    try { document.activeElement && document.activeElement.blur(); } catch {}
+    try { preview.contentWindow && preview.contentWindow.focus(); } catch {}
+  }, 0);
+}
+fullscreenBtn.addEventListener('click', refocusGameSoon);
+popoutBtn.addEventListener('click', refocusGameSoon);
+window.addEventListener('keydown', (e) => {
+  const isSpace = e.key === ' ' || e.code === 'Space';
+  if (!isSpace) return;
+
+  if (e.target === fullscreenBtn || e.target === popoutBtn) {
+    e.preventDefault();
+    refocusGameSoon();
+  }
+}, { capture: true });
+
+preview.addEventListener('load', () => {
+  try { preview.contentWindow.focus(); } catch {}
+});
+document.addEventListener('fullscreenchange', () => {
+  try { preview.contentWindow.focus(); } catch {}
+});
+
+renameFileMenu.onclick = () => {
+  if (!selectedFile) return;
+  openInputModal({
+    title: 'Rename File',
+    label: 'New file name (with extension):',
+    placeholder: selectedFile.split('/').pop(),
+    defaultValue: selectedFile,
+    confirmText: 'Rename',
+    onConfirm: (newFilename) => {
+      if (newFilename === selectedFile) return;
+      postJSON('/move-file', { oldPath: selectedFile, newPath: newFilename })
+        .then(() => {
+          if (currentFile === selectedFile) currentFile = newFilename;
+          loadGeneratedFiles();
+          log(`Renamed file to: ${newFilename}`, 'info');
+        });
+    }
+  });
+  fileMenu.style.display = 'none';
+};
+
+
+duplicateFileMenu.onclick = () => {
+  const newFilename = prompt("Enter new file name (with extension):", `${selectedFile}`);
+  if (newFilename) {
+    postJSON('/duplicate-path', { src: selectedFile, dest: newFilename }).then(loadGeneratedFiles);
+  }
+  fileMenu.style.display = 'none';
+};
+
+deleteFileMenu.onclick = () => {
+  if (selectedFile) {
+    postJSON('/delete-file', { path: selectedFile }).then(loadGeneratedFiles);
+    if (currentFile === selectedFile) {
+      currentFile = null;
+      editor.setValue('');
+      imagePreview.style.display = 'none';
+      audioVideoPreview.style.display = 'none';
+      editor.container.style.display = 'block';
+    }
+    updateFileList();
+  }
+  fileMenu.style.display = 'none';
+};
+
+renameDirMenu.onclick = () => {
+  if (!selectedDirForMenu) return;
+  openInputModal({
+    title: 'Rename Folder',
+    label: 'New folder name:',
+    placeholder: selectedDirForMenu.split('/').pop(),
+    defaultValue: selectedDirForMenu,
+    confirmText: 'Rename',
+    onConfirm: (newName) => {
+      if (newName === selectedDirForMenu) return;
+      postJSON('/move-file', { oldPath: selectedDirForMenu, newPath: newName })
+        .then(() => { loadGeneratedFiles(); log(`Renamed folder to: ${newName}`, 'info'); });
+    }
+  });
+  dirMenu.style.display = 'none';
+};
+
+
+duplicateDirMenu.onclick = () => {
+  if (!selectedDirForMenu) return;
+  const suggested = `${selectedDirForMenu}-copy`;
+  openInputModal({
+    title: 'Duplicate Folder',
+    label: 'New duplicate folder name:',
+    placeholder: suggested.split('/').pop(),
+    defaultValue: suggested,
+    confirmText: 'Duplicate',
+    onConfirm: (newName) => {
+      postJSON('/duplicate-path', { src: selectedDirForMenu, dest: newName })
+        .then(() => { loadGeneratedFiles(); log(`Duplicated folder as: ${newName}`, 'info'); });
+    }
+  });
+  dirMenu.style.display = 'none';
+};
+
+
+deleteDirMenu.onclick = () => {
+  if (selectedDirForMenu) {
+    postJSON('/delete-file', { path: selectedDirForMenu }).then(loadGeneratedFiles);
+  }
+  dirMenu.style.display = 'none';
+};
+
+function updateActiveHtmlSelect() {
+    activeHtmlSelect.innerHTML = '';
+    Object.keys(files).filter(f => f.endsWith('.html') || f.endsWith('.py')).forEach(filename => {
+        const option = document.createElement('option');
+        option.value = filename;
+        option.textContent = filename;
+        activeHtmlSelect.appendChild(option);
+    });
+    if (activeHtmlFile) {
+        activeHtmlSelect.value = activeHtmlFile;
+    } else if (activeHtmlSelect.options.length > 0) {
+        activeHtmlFile = activeHtmlSelect.options[0].value;
+    }
+}
+
+function moveFile(oldPath, targetDir) {
+  const name = oldPath.split('/').pop();
+  const newPath = targetDir ? `${targetDir}/${name}` : name;
+  if (oldPath === newPath) return;
+  postJSON('/move-file', { oldPath, newPath }).then(loadGeneratedFiles);
+}
+
+function loadFile(filename) {
+  // persist current editor buffer before switching
+  if (currentFile && !isImg(currentFile) && !isAudio(currentFile) && !isVid(currentFile)) {
+    files[currentFile] = editor.getValue();
+  }
+
+  currentFile = filename;
+  selectedDirectory = filename.includes('/')
+    ? filename.substring(0, filename.lastIndexOf('/'))
+    : null;
+
+  if (isImg(filename)) {
+    editor.container.style.display = 'none';
+    audioVideoPreview.style.display = 'none';
+    imagePreview.style.display = 'flex';
+
+    const img = new Image();
+    img.onload = () => {
+      baseCanvas.width = img.width;
+      baseCanvas.height = img.height;
+      baseCtx.drawImage(img, 0, 0);
+      canvas.width = img.width;
+      canvas.height = img.height;
+      applyZoom(canvas.width / 2, canvas.height / 2);
+      saveHistory();
+    };
+    // IMPORTANT: load from the inline project route
+    img.src = '/project/' + String(filename || '').replace(/^\/+/, '');
+
+    // Keep the HTML snippet relative (so it works inside the preview app)
+    htmlFilename.value = `<img src="${filename}" alt="${filename}">`;
+  } else if (isAudio(filename)) {
+    editor.container.style.display = 'none';
+    imagePreview.style.display = 'none';
+    audioVideoPreview.style.display = 'flex';
+
+    const audioPlayer = document.getElementById('audio-player');
+    const videoPlayer = document.getElementById('video-player');
+
+    audioPlayer.src = '/project/' + String(filename || '').replace(/^\/+/, '');
+    audioPlayer.style.display = 'block';
+    videoPlayer.style.display = 'none';
+
+    htmlFilename.value = `<audio src="${filename}" controls></audio>`;
+  } else if (isVid(filename)) {
+    editor.container.style.display = 'none';
+    imagePreview.style.display = 'none';
+    audioVideoPreview.style.display = 'flex';
+
+    const videoPlayer = document.getElementById('video-player');
+    const audioPlayer = document.getElementById('audio-player');
+
+    videoPlayer.src = '/project/' + String(filename || '').replace(/^\/+/, '');
+    videoPlayer.style.display = 'block';
+    audioPlayer.style.display = 'none';
+
+    htmlFilename.value = `<video src="${filename}" controls></video>`;
+  } else {
+    // code file
+    editor.container.style.display = 'block';
+    imagePreview.style.display = 'none';
+    audioVideoPreview.style.display = 'none';
+
+    const content = (typeof files[filename] === 'string') ? files[filename] : '';
+    editor.session.setMode(getFileMode(filename));
+    editor.setValue(content, -1);
+  }
+
+  updateFileList();
+}
+
+function isImg(filename) {
+    return /\.(png|jpg|jpeg|gif)$/i.test(filename); //regex
+}
+
+function isAudio(filename) {
+    return /\.(mp3|wav|ogg)$/i.test(filename); //regex
+}
+
+function isVid(filename) {
+    return /\.(mp4|webm|ogg|mov)$/i.test(filename); //regex
+}
+
+function getFileMode(filename) {
+    const extension = filename.split('.').pop();
+    switch (extension) {
+        case 'html': return "ace/mode/html";
+        case 'css': return "ace/mode/css";
+        case 'js': return "ace/mode/javascript";
+        case 'py': return "ace/mode/python";
+        default: return "ace/mode/text";
+    }
+}
+
+addFileBtn.onclick = () => {
+  const baseDir = selectedDirectory ? selectedDirectory : '';
+  openInputModal({
+    title: 'Add New File',
+    label: 'File name (with extension):',
+    placeholder: 'index.html',
+    confirmText: 'Create',
+    onConfirm: (filename) => {
+      const path = baseDir ? `${baseDir}/${filename}` : filename;
+      if (files[path]) { log(`File already exists: ${path}`, 'warn'); return; }
+      files[path] = '';
+      postJSON('/save-file', { path, content: '' }).then(() => {
+        loadGeneratedFiles();
+        loadFile(path);
+        log(`Created file: ${path}`, 'info');
+      });
+    }
+  });
+};
+
+
+addFolderBtn.onclick = () => {
+  const baseDir = selectedDirectory ? selectedDirectory : '';
+  openInputModal({
+    title: 'Add New Folder',
+    label: 'Folder name:',
+    placeholder: 'assets',
+    confirmText: 'Create',
+    onConfirm: (folderName) => {
+      const dirPath = baseDir ? `${baseDir}/${folderName}` : folderName;
+      postJSON('/create-directory', { path: dirPath }).then(() => {
+        loadGeneratedFiles();
+        log(`Created folder: ${dirPath}`, 'info');
+      });
+    }
+  });
+};
+
+uploadFileBtn.onclick = () => {
+    fileInput.click();
+};
+
+fileInput.onchange = async (event) => {
+  const fd = new FormData();
+  for (const f of event.target.files) fd.append('files', f);
+  try {
+    const res = await csrfFetch('/upload-for-code', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error('upload failed');
+    await loadGeneratedFiles();
+    log('Files uploaded successfully', 'info');
+  } catch (e) {
+    log('Upload error: ' + e.message, 'error');
+  } finally {
+    fileInput.value = '';
+  }
+};
+
+deleteFileBtn.onclick = () => {
+  if (currentFile) {
+    postJSON('/delete-file', { path: currentFile }).then(loadGeneratedFiles);
+    delete files[currentFile];
+    currentFile = null;
+    editor.setValue('');
+    imagePreview.style.display = 'none';
+    audioVideoPreview.style.display = 'none';
+    editor.container.style.display = 'block';
+  }
+};
+
+clearConsoleBtn.onclick = () => {
+    consoleOutput.innerHTML = '';
+};
+
+function log(message, type = 'log') {
+    const logElement = document.createElement('div');
+    logElement.classList.add('log', type);
+    logElement.textContent = message;
+    consoleOutput.appendChild(logElement);
+    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+}
+
+const dirtyPaths = new Set();
+
+function markDirty(path) { if (path) dirtyPaths.add(path); }
+
+function saveCurrentFile() {
+  if (currentFile && !isImg(currentFile) && !isAudio(currentFile) && !isVid(currentFile)) {
+    files[currentFile] = editor.getValue();
+    markDirty(currentFile);
+  }
+  return Promise.resolve();
+}
+
+async function saveDirty() {
+  if (!dirtyPaths.size) return;
+  const toSave = Array.from(dirtyPaths);
+  dirtyPaths.clear();
+  await Promise.all(toSave.map(path =>
+    postJSON('/save-file', { path, content: files[path] })
+      .catch(() => log(`Save failed: ${path}`, 'error'))
+  ));
+  toSave.forEach(p => log(`Saved: ${p}`, 'info'));
+}
+
+
+runBtn.onclick = async () => {
+  await saveCurrentFile();
+  await saveDirty();
+  consoleOutput.innerHTML = '';
+  enterPerf();
+
+  let fileToRun = activeHtmlFile;
+  if (!fileToRun && projectOptions.scriptMode === 'pygame') fileToRun = 'game.py';
+  if (!fileToRun) { log('No active HTML or Python file selected.', 'error'); return; }
+
+  // Python path unchanged...
+  if (fileToRun.endsWith('.py')) {
+        if (!files[fileToRun]) {
+            log('No ' + fileToRun + ' found.', 'error');
+            return;
+        }
+        if (projectOptions.scriptMode === 'pygame') {
+            const overlay = document.getElementById('apk-loading');
+            overlay.style.display = 'flex';
+            postJSON('/create-apk', { file: fileToRun })
+            .then(res => res.json()).then(data => {
+                overlay.style.display = 'none';
+                if (data.apk) {
+                fetch('pygame.html').then(r => r.text()).then(html => {
+                    preview.srcdoc = html.replace(/apk\/generated\.apk/g, data.apk); //regex
+                });
+                } else {
+                log('Failed to create apk', 'error');
+                }
+            }).catch(err => {
+                overlay.style.display = 'none';
+                log('APK build error', 'error');
+            });
+        } else {
+            const deps = (projectOptions.pythonDependencies || '').split(',').map(d => d.trim()).filter(d => d);
+            const pyCode = JSON.stringify(files[fileToRun]);
+            const depsList = JSON.stringify(deps);
+            preview.srcdoc = `<!DOCTYPE html><html><head><script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"><\/script><script>async function main(){ let pyodide = await loadPyodide(); pyodide.setStdout({batched:s=>parent.postMessage({type:'log',message:s},'*')}); pyodide.setStderr({batched:s=>parent.postMessage({type:'error',message:s},'*')}); const deps = ${depsList}; if (deps.length){ await pyodide.loadPackage('micropip'); const micropip = pyodide.pyimport('micropip'); for(const pkg of deps){ try{ await micropip.install(pkg); } catch(e){ parent.postMessage({type:'error',message:e.toString()},'*'); } } } try { await pyodide.runPythonAsync(${pyCode}); } catch(e){ parent.postMessage({type:'error',message:e.toString()},'*'); }}main();<\/script></head><body></body></html>`;
+        }
+        return;
+    }
+  try {
+    const r = await postJSON('/api/preview-url', { file: fileToRun });
+    const { url } = await r.json();
+    if (!url) throw new Error('No preview url');
+    preview.removeAttribute('srcdoc');
+    preview.src = url;
+  } catch (e) {
+    log('Preview failed to start.', 'error');
+  }
+};
+
+editor.container.addEventListener('pointerdown', exitPerf);
+
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.type) {
+        if (event.data.type === 'navigate') {
+            const newActiveFile = event.data.url;
+            if (files[newActiveFile]) {
+                activeHtmlFile = newActiveFile;
+                activeHtmlSelect.value = newActiveFile;
+                runBtn.click();
+            } else {
+                log(`File not found: ${newActiveFile}`, 'error');
+            }
+        } else {
+            log(event.data.message, event.data.type);
+        }
+    }
+});
+
+saveBtn.onclick = saveCurrentFile;
+
+activeHtmlSelect.onchange = function() {
+    activeHtmlFile = this.value;
+};
+
+// drag and drop
+const fileExplorer = document.getElementById('file-explorer');
+
+fileExplorer.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    fileExplorer.style.border = '2px dashed #1177bb';
+});
+
+fileExplorer.addEventListener('dragleave', () => {
+    fileExplorer.style.border = 'none';
+});
+
+fileExplorer.addEventListener('drop', (event) => {
+    event.preventDefault();
+    fileExplorer.style.border = 'none';
+    const items = event.dataTransfer.items;
+    for (const item of items) {
+        if (item.kind === 'file') {
+            const file = item.getAsFile();
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                const filename = file.name;
+                if (isImg(filename) || isAudio(filename) || isVid(filename)) {
+                    files[filename] = content;
+                } else {
+                    unsupportedFile = { filename, content: e.target.result };
+                    openModal(unsupportedPopup);
+                }
+                updateFileList();
+            };
+            if (isImg(file.name) || isAudio(file.name) || isVid(file.name)) {
+                reader.readAsDataURL(file);
+            } else {
+                reader.readAsText(file);
+            }
+        }
+    }
+});
+
+copyFilenameBtn.onclick = () => {
+    htmlFilename.select();
+    document.execCommand('copy');
+};
+
+// download project as zip
+downloadProjectBtn.onclick = () => {
+    const zip = new JSZip();
+    const zipFilename = zipFilenameInput.value || 'project';
+    for (const [filename, content] of Object.entries(files)) {
+        if (isImg(filename) || isAudio(filename) || isVid(filename)) {
+            const base64Data = content.split(',')[1];
+            zip.file(filename, base64Data, { base64: true });
+        } else {
+            zip.file(filename, content);
+        }
+    }
+    zip.generateAsync({ type: 'blob' }).then((content) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = `${zipFilename}.zip`;
+        a.click();
+    });
+};
+
+settingsBtn.onclick = () => openModal(settingsPopup);
+closeSettingsBtn.onclick = () => closeModal(settingsPopup);
+
+// change font size
+fontSizeSlider.oninput = () => {
+    const fontSize = fontSizeSlider.value + 'px';
+    editor.setOptions({
+        fontSize: fontSize
+    });
+};
+
+// change theme
+themeSelect.onchange = () => {
+    const theme = themeSelect.value;
+    editor.setTheme(theme);
+};
+
+// change font family
+fontFamilySelect.onchange = () => {
+    const fontFamily = fontFamilySelect.value;
+    editor.setOptions({
+        fontFamily: fontFamily
+    });
+};
+
+
+importZipBtn.onclick = () => openModal(confirmationPopup);
+
+confirmBtn.onclick = () => {
+closeModal(confirmationPopup);
+
+const zipInput = document.createElement('input');
+zipInput.type = 'file';
+zipInput.accept = '.zip';
+zipInput.style.display = 'none';
+document.body.appendChild(zipInput);
+
+zipInput.onchange = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    JSZip.loadAsync(file).then((zip) => {
+    files = {};
+    zip.forEach((relativePath, zipEntry) => {
+        zipEntry.async('base64').then((content) => {
+        const ext = relativePath.split('.').pop().toLowerCase();
+        if (['png','jpg','jpeg','gif','mp3','wav','ogg','mp4','webm','mov'].includes(ext)) {
+            files[relativePath] = `data:${ext};base64,${content}`;
+        } else {
+            zipEntry.async('string').then((txt) => {
+            files[relativePath] = txt;
+            updateFileList();
+            });
+        }
+        });
+    });
+    log('Project imported successfully!', 'info');
+    }).catch((error) => {
+    log(`Error importing project: ${error.message}`, 'error');
+    });
+};
+
+zipInput.click();
+};
+
+cancelBtn.onclick = () => closeModal(confirmationPopup);
+closeConfirmationBtn.onclick = () => closeModal(confirmationPopup);
+addAnywayBtn.onclick = () => {
+    if (unsupportedFile) {
+        files[unsupportedFile.filename] = unsupportedFile.content;
+        updateFileList();
+        closeModal(unsupportedPopup);
+    }
+};
+
+cancelUploadBtn.onclick = () => {
+    closeModal(unsupportedPopup);
+};
+
+let prevX, prevY; // track previous point for pencil
+
+canvas.addEventListener('mousedown', (e) => {
+  drawing = true;
+  startX = (e.offsetX - tx) / zoom;
+  startY = (e.offsetY - ty) / zoom;
+  prevX = startX;
+  prevY = startY;
+
+  if (currentTool === 'pencil') {
+    baseCtx.beginPath();
+    baseCtx.moveTo(startX, startY);
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!drawing) return;
+  endX = (e.offsetX - tx) / zoom;
+  endY = (e.offsetY - ty) / zoom;
+
+  if (currentTool === 'pencil') {
+    baseCtx.strokeStyle = color;
+    baseCtx.lineWidth = strokeWidth / zoom;
+    baseCtx.lineCap = 'round';
+    baseCtx.lineTo(endX, endY);
+    baseCtx.stroke();
+    baseCtx.beginPath();
+    baseCtx.moveTo(endX, endY);
+    applyZoom();
+  } else if (currentTool === 'eraser') {
+    const size = strokeWidth / zoom;
+    baseCtx.clearRect(endX - size / 2, endY - size / 2, size, size);
+    applyZoom();
+  } else if (currentTool === 'crop') {
+    applyZoom();
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.scale(zoom, zoom);
+    ctx.strokeStyle = 'red';
+    ctx.lineWidth = 2 / zoom;
+    ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+    ctx.restore();
+  }
+
+  prevX = endX;
+  prevY = endY;
+});
+
+canvas.addEventListener('mouseup', () => {
+  drawing = false;
+  baseCtx.beginPath();
+
+  if (currentTool === 'crop') {
+    const cropWidth = Math.max(1, endX - startX);
+    const cropHeight = Math.max(1, endY - startY);
+    const sx = Math.min(startX, endX);
+    const sy = Math.min(startY, endY);
+    const cropped = baseCtx.getImageData(sx, sy, Math.abs(cropWidth), Math.abs(cropHeight));
+    baseCanvas.width = cropped.width;
+    baseCanvas.height = cropped.height;
+    baseCtx.putImageData(cropped, 0, 0);
+    canvas.width = baseCanvas.width;
+    canvas.height = baseCanvas.height;
+  }
+
+  if (currentTool === 'crop' || currentTool === 'pencil' || currentTool === 'eraser') {
+    saveHistory();
+    applyZoom(canvas.width / 2, canvas.height / 2);
+  }
+});
+
+document.getElementById('color-picker').addEventListener('change', (e) => {
+    color = e.target.value;
+});
+
+document.getElementById('stroke-width').addEventListener('input', (e) => {
+    strokeWidth = parseInt(e.target.value, 10);
+});
+
+document.getElementById('pencil-btn').addEventListener('click', () => {
+    currentTool = 'pencil';
+});
+
+document.getElementById('eraser-btn').addEventListener('click', () => {
+    currentTool = 'eraser';
+});
+
+document.getElementById('crop-btn').addEventListener('click', () => {
+    currentTool = 'crop';
+});
+
+document.getElementById('undo-btn').addEventListener('click', () => {
+    if (historyIndex > 0) {
+        historyIndex--;
+        const img = new Image();
+        img.onload = () => {
+            baseCanvas.width = img.width;
+            baseCanvas.height = img.height;
+            baseCtx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
+            baseCtx.drawImage(img, 0, 0);
+            canvas.width = baseCanvas.width;
+            canvas.height = baseCanvas.height;
+            applyZoom();
+        };
+        img.src = history[historyIndex];
+    }
+});
+
+document.getElementById('redo-btn').addEventListener('click', () => {
+    if (historyIndex < history.length - 1) {
+        historyIndex++;
+        const img = new Image();
+        img.onload = () => {
+            baseCanvas.width = img.width;
+            baseCanvas.height = img.height;
+            baseCtx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
+            baseCtx.drawImage(img, 0, 0);
+            canvas.width = baseCanvas.width;
+            canvas.height = baseCanvas.height;
+            applyZoom();
+        };
+        img.src = history[historyIndex];
+    }
+});
+
+document.getElementById('zoom-in-btn').addEventListener('click', () => {
+    zoom *= 1.2;
+    applyZoom();
+});
+
+document.getElementById('zoom-out-btn').addEventListener('click', () => {
+    zoom /= 1.2;
+    applyZoom();
+});
+
+let tx = 0, ty = 0;
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const zoomFactor = 1.1;
+  zoom = (e.deltaY < 0) ? (zoom * zoomFactor) : (zoom / zoomFactor);
+  applyZoom(canvas.width / 2, canvas.height / 2);
+}, { passive: false });
+
+function applyZoom(centerX = canvas.width / 2, centerY = canvas.height / 2) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  tx = centerX * (1 - zoom);
+  ty = centerY * (1 - zoom);
+  ctx.translate(tx, ty);
+  ctx.scale(zoom, zoom);
+  ctx.drawImage(baseCanvas, 0, 0);
+  ctx.restore();
+}
+
+function saveHistory() {
+    history.push(baseCanvas.toDataURL());
+    historyIndex = history.length - 1;
+}
+
+document.getElementById('save-image-btn').addEventListener('click', async () => {
+  if (currentFile && isImg(currentFile)) {
+    const dataURL = baseCanvas.toDataURL();
+    files[currentFile] = dataURL;
+    markDirty(currentFile);
+    await saveDirty();
+    log(`Image ${currentFile} saved!`, 'info');
+  }
+});
+
+const backdrop = document.getElementById('modal-backdrop');
+
+function openModal(el){
+el.classList.add('open');
+backdrop.classList.add('open');
+}
+function closeModal(el){
+el.classList.remove('open');
+// hide backdrop only if no other modal is open
+const anyOpen = document.querySelector('.settings-popup.open, .confirmation-popup.open');
+if (!anyOpen) backdrop.classList.remove('open');
+}
+// click backdrop or press Esc to close the topmost modal
+backdrop.addEventListener('click', () => {
+document.querySelectorAll('.settings-popup.open, .confirmation-popup.open')
+    .forEach(m => m.classList.remove('open'));
+backdrop.classList.remove('open');
+});
+document.addEventListener('keydown', e => {
+if (e.key === 'Escape') {
+    document.querySelectorAll('.settings-popup.open, .confirmation-popup.open')
+    .forEach(m => m.classList.remove('open'));
+    backdrop.classList.remove('open');
+}
+});
+
+
+document.addEventListener('keydown', function(event) {
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        saveCurrentFile();
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+        event.preventDefault();
+        runBtn.click();
+    }
+});
+
+// fullscreen
+fullscreenBtn.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+        previewContainer.requestFullscreen().catch(err => {
+            log(`Error attempting to enable fullscreen mode: ${err.message}`, 'error');
+        });
+    } else {
+        document.exitFullscreen();
+    }
+});
+
+// listen for fullscreen
+document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) {
+        fullscreenBtn.textContent = '❎';
+    } else {
+        fullscreenBtn.textContent = '⛶';
+    }
+});
+
+document.getElementById('profile-link').addEventListener('click', () => {
+  csrfFetch('/api/status').then(r => r.json()).then(s => {
+    if (!s.authenticated) {
+      window.location = 'login.html';
+    } else {
+      window.location = 'profile.html';
+    }
+  });
+});
+</script>
+</body>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<script>
+  new Choices('#edit-model-select', {
+    searchEnabled: false,
+    allowHTML: false,
+    itemSelectText: '',
+    shouldSort: false
+  });
+</script>
+</html> 
+
+
