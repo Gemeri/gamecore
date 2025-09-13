@@ -7,13 +7,13 @@ GameCore is an AI-powered, browser-based web creation platform built with Node.j
 ## What’s in this repository
 
 ```
-server.js      # Main Express app, APIs, preview server, auth, security, file I/O, AI orchestration
-db.js          # PostgreSQL connection and schema setup (sessions, users, resets, login audit)
+server.js      # main Express app, APIs, preview server, auth, security, file I/O, AI orchestration
+db.js          # postgreSQL connection and schema setup (sessions, users, resets, login audit)
 public/
-  index.html   # Landing/“home” page for quick idea, prototype and generation options
-  web.html     # Full multi-file editor UI, file explorer, live preview panel, console
+  index.html   # landing/“home” page for quick idea, prototype and generation options
+  web.html     # full multi-file editor UI, file explorer, live preview panel, console
   ...          # auth pages (login/signup), profile, loading, suggestions, etc
-generated/     # Per-user working directory (created on demand)
+generated/     # per-user working directory (created on demand)
 ```
 
 ### `server.js`
@@ -86,6 +86,7 @@ Other public pages (`login.html`, `signup.html`, `profile.html`, `loading.html`,
 * **Google OAuth** client ID/secret
 
 Install and run:
+
 
 **Install Dependancies:**
 ```bash
