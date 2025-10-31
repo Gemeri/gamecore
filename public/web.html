@@ -65,6 +65,46 @@ body, html {
   filter: drop-shadow(0 2px 4px rgba(0,0,0,.3));
 }
 
+.project-switcher{
+  margin-left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-switcher label{
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#project-select{
+  min-width: 190px;
+  padding: 8px 36px 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
+  color: var(--text);
+  outline: none;
+  appearance: none;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0)),
+    url("data:image/svg+xml;utf8,<svg fill='white' opacity='.85' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat, no-repeat;
+  background-position: 0 0, right 10px center;
+  background-size: auto, 18px;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+#project-select:focus{
+  border-color: rgba(139,92,246,.6);
+  box-shadow: 0 0 0 6px rgba(139,92,246,.12);
+}
+
+#project-select option{
+  background: #0f0a23;
+  color: var(--text);
+}
+
 #edit-panel label{
   display:flex;
   flex-direction:column;
@@ -404,11 +444,11 @@ body.perf .preview-container{
   transition: opacity var(--transition);
 }
 
-.settings-popup, .confirmation-popup { padding-right: 56px; }
-.settings-popup h2, .confirmation-popup h3 { margin-right: 12px; }
+.settings-popup, .confirmation-popup, .project-popup { padding-right: 56px; }
+.settings-popup h2, .confirmation-popup h3, .project-popup h3 { margin-right: 12px; }
 
 /* popups */
-.settings-popup, .confirmation-popup{
+.settings-popup, .confirmation-popup, .project-popup{
   position: fixed; top: 50%; left: 50%;
   transform: translate(-50%, -50%) translateY(8px) scale(.98);
   background: var(--surface-strong); color: var(--text);
@@ -420,21 +460,22 @@ body.perf .preview-container{
   opacity: 0; visibility: hidden;
   transition: opacity var(--transition), transform var(--transition), visibility 0s linear .22s;
 }
-.settings-popup.open, .confirmation-popup.open{
+.settings-popup.open, .confirmation-popup.open, .project-popup.open{
   opacity: 1; visibility: visible;
   transform: translate(-50%, -50%) translateY(0) scale(1);
   transition: opacity var(--transition), transform var(--transition);
 }
 .settings-popup h2{ margin: 0 0 12px 0; }
-.settings-popup label, .confirmation-popup h3{ color: var(--text); }
-.settings-popup select, .settings-popup input[type="text"], .settings-popup input[type="range"]{
+.settings-popup label, .project-popup label, .confirmation-popup h3{ color: var(--text); }
+.settings-popup select, .settings-popup input[type="text"], .settings-popup input[type="range"], .project-popup input[type="text"]{
   width: 100%; margin-top: 6px;
   background: linear-gradient(180deg, rgba(19,12,35,.85), rgba(19,12,35,.7));
   border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 10px 12px;
 }
 
 .settings-popup .close-btn,
-.confirmation-popup .close-btn{
+.confirmation-popup .close-btn,
+.project-popup .close-btn{
   position:absolute;
   top:-6px;
   right:2px;
@@ -443,8 +484,56 @@ body.perf .preview-container{
   border:1px solid var(--border);
   background: rgba(255,255,255,.06);
 }
+
 .confirmation-popup{ text-align: center; }
 .confirmation-popup button{ margin-top: 14px; }
+
+#project-settings{
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.visibility-toggle{
+  display: inline-flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.visibility-toggle button{
+  flex: 1;
+  background: rgba(139,92,246,.18);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition), border-color var(--transition);
+}
+
+.visibility-toggle button:hover{
+  transform: translateY(-1px);
+}
+
+.visibility-toggle button.active{
+  background: linear-gradient(135deg, rgba(139,92,246,.45), rgba(34,211,238,.35));
+  border-color: rgba(139,92,246,.6);
+}
+
+.project-popup h3{
+  margin: 0 0 12px 0;
+}
+
+.project-popup .visibility-toggle{
+  width: 100%;
+}
+
+.project-popup .input-actions{
+  justify-content: flex-end;
+}
 
 #mode-menu{ background: var(--surface-strong); }
 #mode-menu button { width: 100%; }
@@ -524,11 +613,17 @@ body.perf .preview-container{
 </head>
 <body>
   <div class="header">
-      <div style="display:flex;align-items:center">
           <div class="menu-toggle" id="menu-toggle">&#9776;</div>
           <div class="logo-container">
               <img src="images/gamecore.png" alt="logo">
               <div class="logo">GameCore</div>
+          </div>
+          <div class="project-switcher">
+              <label for="project-select">Project</label>
+              <select id="project-select">
+                  <option value="draft">Draft</option>
+                  <option value="__new__">＋ Save New Project</option>
+              </select>
           </div>
       </div>
       <div class="nav">
@@ -635,6 +730,26 @@ body.perf .preview-container{
       <div id="delete-dir" class="menu-item">Delete</div>
   </div>
 
+  <div id="new-project-popup" class="project-popup">
+    <h3>Save as New Project</h3>
+    <button class="close-btn" id="close-new-project-btn">X</button>
+    <label>
+        Project Name:
+        <input type="text" id="new-project-name" placeholder="e.g. My Game" />
+    </label>
+    <label>
+        Visibility:
+        <div class="visibility-toggle" id="new-project-visibility">
+            <button type="button" data-new-visibility="private" class="active">Private</button>
+            <button type="button" data-new-visibility="public">Public</button>
+        </div>
+    </label>
+    <div class="input-actions">
+        <button id="new-project-create" class="primary">Save</button>
+        <button id="new-project-cancel">Cancel</button>
+    </div>
+  </div>
+
     <!-- settings popup -->
 <div id="settings-popup" class="settings-popup">
   <h2>Settings</h2>
@@ -717,13 +832,26 @@ body.perf .preview-container{
       </select>
   </label>
   <label>
-      Project Name:
+      Download Filename:
       <input type="text" id="zip-filename" placeholder="Enter filename">
   </label>
   <label>
       Python Dependencies:
       <input type="text" id="python-deps" placeholder="e.g. pygame, numpy">
   </label>
+  <div id="project-settings">
+      <label>
+          Project Name:
+          <input type="text" id="project-name-input" placeholder="Enter project name">
+      </label>
+      <label>
+          Visibility:
+          <div class="visibility-toggle" id="project-visibility-toggle">
+              <button type="button" data-project-visibility="private">Private</button>
+              <button type="button" data-project-visibility="public">Public</button>
+          </div>
+      </label>
+  </div>
 </div>
   
 <div id="input-popup" class="input-popup">
@@ -901,6 +1029,16 @@ const editMode = document.getElementById('edit-mode');
 const editBtn = document.getElementById('edit-btn');
 const editPrompt = document.getElementById('edit-prompt');
 const editLoading = document.getElementById('edit-loading');
+const projectSelect = document.getElementById('project-select');
+const newProjectPopup = document.getElementById('new-project-popup');
+const closeNewProjectBtn = document.getElementById('close-new-project-btn');
+const newProjectNameInput = document.getElementById('new-project-name');
+const newProjectCreateBtn = document.getElementById('new-project-create');
+const newProjectCancelBtn = document.getElementById('new-project-cancel');
+const newProjectVisibilityButtons = document.querySelectorAll('[data-new-visibility]');
+const projectSettingsSection = document.getElementById('project-settings');
+const projectNameInput = document.getElementById('project-name-input');
+const projectVisibilityButtons = document.querySelectorAll('[data-project-visibility]');
 const projectOptions = JSON.parse(localStorage.getItem('projectOptions') || '{}');
 
 popoutBtn.onclick = async () => {
@@ -976,6 +1114,8 @@ let strokeWidth = 2;
 let zoom = 1;
 let history = [];
 let historyIndex = -1;
+let projectState = { list: [], active: 'draft' };
+let newProjectVisibility = 'private';
 
 async function loadGeneratedFiles() {
   try {
@@ -1025,7 +1165,270 @@ async function loadGeneratedFiles() {
   }
 }
 
-loadGeneratedFiles();
+function getActiveProjectInfo() {
+  if (!projectState || !Array.isArray(projectState.list)) return null;
+  if (!projectState.active || projectState.active === 'draft') return null;
+  return projectState.list.find(p => p.id === projectState.active) || null;
+}
+
+function renderProjectDropdown() {
+  if (!projectSelect) return;
+  const activeId = projectState.active || 'draft';
+  projectSelect.innerHTML = '';
+
+  const draftOption = document.createElement('option');
+  draftOption.value = 'draft';
+  draftOption.textContent = 'Draft';
+  projectSelect.appendChild(draftOption);
+
+  (projectState.list || []).forEach(proj => {
+    if (!proj || !proj.id) return;
+    const opt = document.createElement('option');
+    opt.value = proj.id;
+    opt.textContent = proj.name || 'Untitled Project';
+    projectSelect.appendChild(opt);
+  });
+
+  const newOption = document.createElement('option');
+  newOption.value = '__new__';
+  newOption.textContent = '＋ Save New Project';
+  projectSelect.appendChild(newOption);
+
+  if (activeId === 'draft' || (projectState.list || []).some(p => p.id === activeId)) {
+    projectSelect.value = activeId;
+  } else {
+    projectSelect.value = 'draft';
+  }
+}
+
+function updateProjectSettingsUI() {
+  if (!projectSettingsSection) return;
+  const activeProject = getActiveProjectInfo();
+  if (!activeProject) {
+    projectSettingsSection.style.display = 'none';
+    return;
+  }
+  projectSettingsSection.style.display = 'flex';
+  if (projectNameInput && document.activeElement !== projectNameInput) {
+    projectNameInput.value = activeProject.name || '';
+  }
+  projectVisibilityButtons.forEach(btn => {
+    const val = btn.dataset.projectVisibility;
+    btn.classList.toggle('active', val === activeProject.visibility);
+  });
+}
+
+function resetProjectFileState() {
+  currentFile = null;
+  activeHtmlFile = null;
+  selectedFile = null;
+  selectedDirectory = null;
+  selectedDirForMenu = null;
+}
+
+function setNewProjectVisibility(value) {
+  newProjectVisibility = value;
+  newProjectVisibilityButtons.forEach(btn => {
+    const val = btn.dataset.newVisibility;
+    btn.classList.toggle('active', val === value);
+  });
+}
+
+async function refreshProjects() {
+  if (!projectSelect) return;
+  try {
+    const res = await csrfFetch('/api/projects');
+    const data = await res.json();
+    projectState.list = Array.isArray(data.projects) ? data.projects : [];
+    projectState.active = data.active || 'draft';
+    renderProjectDropdown();
+    updateProjectSettingsUI();
+  } catch (err) {
+    console.error('Failed to fetch projects', err);
+  }
+}
+
+async function selectProject(projectId) {
+  if (!projectId || projectId === '__new__') return;
+  try {
+    const res = await postJSON('/api/projects/select', { id: projectId });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to switch project');
+    }
+    if (data.projects) {
+      projectState.list = Array.isArray(data.projects) ? data.projects : projectState.list;
+    }
+    if (data.active) {
+      projectState.active = data.active;
+    } else {
+      projectState.active = projectId;
+    }
+    renderProjectDropdown();
+    updateProjectSettingsUI();
+    resetProjectFileState();
+    await loadGeneratedFiles();
+    const activeProject = getActiveProjectInfo();
+    if (activeProject) {
+      log(`Switched to project "${activeProject.name}"`, 'info');
+    } else {
+      log('Switched to draft project', 'info');
+    }
+  } catch (err) {
+    console.error(err);
+    log(err.message || 'Failed to switch project', 'error');
+    renderProjectDropdown();
+  }
+}
+
+async function createNewProject() {
+  if (!newProjectNameInput) return;
+  const rawName = newProjectNameInput.value.trim();
+  if (!rawName) {
+    newProjectNameInput.focus();
+    return;
+  }
+  try {
+    const res = await postJSON('/api/projects', { name: rawName, visibility: newProjectVisibility });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to create project');
+    }
+    projectState.list = Array.isArray(data.projects) ? data.projects : projectState.list;
+    projectState.active = data.active || (data.project && data.project.id) || projectState.active;
+    closeModal(newProjectPopup);
+    renderProjectDropdown();
+    updateProjectSettingsUI();
+    resetProjectFileState();
+    await loadGeneratedFiles();
+    const activeProject = getActiveProjectInfo();
+    if (activeProject) {
+      log(`Created project "${activeProject.name}"`, 'info');
+    }
+  } catch (err) {
+    console.error(err);
+    log(err.message || 'Failed to create project', 'error');
+  }
+}
+
+async function updateActiveProject(details) {
+  const active = getActiveProjectInfo();
+  if (!active) return;
+  try {
+    const res = await postJSON('/api/projects/update', { id: active.id, ...details });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to update project');
+    }
+    if (data.project) {
+      const idx = projectState.list.findIndex(p => p.id === data.project.id);
+      if (idx !== -1) {
+        projectState.list[idx] = { ...projectState.list[idx], ...data.project };
+      }
+    }
+    renderProjectDropdown();
+    updateProjectSettingsUI();
+  } catch (err) {
+    console.error(err);
+    log(err.message || 'Failed to update project', 'error');
+  }
+}
+
+function openNewProjectModal() {
+  if (!newProjectPopup) return;
+  if (newProjectNameInput) {
+    newProjectNameInput.value = '';
+  }
+  setNewProjectVisibility('private');
+  openModal(newProjectPopup);
+  setTimeout(() => newProjectNameInput && newProjectNameInput.focus(), 50);
+}
+
+function closeNewProjectModal() {
+  if (!newProjectPopup) return;
+  closeModal(newProjectPopup);
+}
+
+async function initializeWorkspace() {
+  await refreshProjects();
+  resetProjectFileState();
+  await loadGeneratedFiles();
+}
+
+setNewProjectVisibility('private');
+
+if (projectSelect) {
+  projectSelect.addEventListener('change', () => {
+    const value = projectSelect.value;
+    if (value === '__new__') {
+      projectSelect.value = projectState.active || 'draft';
+      openNewProjectModal();
+      return;
+    }
+    if (value === (projectState.active || 'draft')) return;
+    selectProject(value);
+  });
+}
+
+newProjectVisibilityButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const value = btn.dataset.newVisibility || 'private';
+    setNewProjectVisibility(value);
+  });
+});
+
+if (newProjectCreateBtn) {
+  newProjectCreateBtn.addEventListener('click', createNewProject);
+}
+if (newProjectCancelBtn) {
+  newProjectCancelBtn.addEventListener('click', () => closeNewProjectModal());
+}
+if (closeNewProjectBtn) {
+  closeNewProjectBtn.addEventListener('click', () => closeNewProjectModal());
+}
+if (newProjectNameInput) {
+  newProjectNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      createNewProject();
+    }
+  });
+}
+
+if (projectNameInput) {
+  projectNameInput.addEventListener('change', () => {
+    const active = getActiveProjectInfo();
+    if (!active) return;
+    const newName = projectNameInput.value.trim();
+    if (!newName) {
+      projectNameInput.value = active.name || '';
+      return;
+    }
+    if (newName === active.name) return;
+    updateActiveProject({ name: newName });
+  });
+  projectNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      projectNameInput.blur();
+    }
+  });
+}
+
+projectVisibilityButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const active = getActiveProjectInfo();
+    if (!active) return;
+    const value = btn.dataset.projectVisibility;
+    if (!value || value === active.visibility) return;
+    updateActiveProject({ visibility: value });
+  });
+});
+
+initializeWorkspace().catch(err => {
+  console.error('Failed to initialize workspace', err);
+});
+
 
 const placeModeMenu = () => {
 const r = menuToggleBtn.getBoundingClientRect();
@@ -2010,21 +2413,25 @@ el.classList.add('open');
 backdrop.classList.add('open');
 }
 function closeModal(el){
+if (!el) return;
 el.classList.remove('open');
+if (el === newProjectPopup && projectSelect) {
+    projectSelect.value = projectState.active || 'draft';
+}
 // hide backdrop only if no other modal is open
-const anyOpen = document.querySelector('.settings-popup.open, .confirmation-popup.open');
+const anyOpen = document.querySelector('.settings-popup.open, .confirmation-popup.open, .project-popup.open');
 if (!anyOpen) backdrop.classList.remove('open');
 }
 // click backdrop or press Esc to close the topmost modal
 backdrop.addEventListener('click', () => {
-document.querySelectorAll('.settings-popup.open, .confirmation-popup.open')
-    .forEach(m => m.classList.remove('open'));
+document.querySelectorAll('.settings-popup.open, .confirmation-popup.open, .project-popup.open')
+    .forEach(m => closeModal(m));
 backdrop.classList.remove('open');
 });
 document.addEventListener('keydown', e => {
 if (e.key === 'Escape') {
-    document.querySelectorAll('.settings-popup.open, .confirmation-popup.open')
-    .forEach(m => m.classList.remove('open'));
+    document.querySelectorAll('.settings-popup.open, .confirmation-popup.open, .project-popup.open')
+    .forEach(m => closeModal(m));
     backdrop.classList.remove('open');
 }
 });
