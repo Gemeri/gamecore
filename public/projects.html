@@ -193,9 +193,60 @@
     .project-meta{
       display: flex;
       align-items: center;
-      gap: 14px;
+      justify-content: space-between;
+      gap: 12px;
       color: var(--muted);
       font-size: 14px;
+      flex-wrap: wrap;
+    }
+
+    .project-owner{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .reaction-buttons{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .reaction-button{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background var(--transition), transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+    }
+
+    .reaction-button .count{
+      font-variant-numeric: tabular-nums;
+    }
+
+    .reaction-button:hover{
+      transform: translateY(-2px);
+    }
+
+    .reaction-button.active{
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0b0b16;
+      border-color: transparent;
+      box-shadow: 0 12px 24px rgba(139,92,246,0.24);
+    }
+
+    .reaction-button[disabled]{
+      opacity: .6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
 
     .empty-state{
@@ -290,27 +341,16 @@
       debounce: null
     };
 
-    function renderProjects(container, items) {
-      container.innerHTML = '';
-      for (const project of items) {
-        const card = document.createElement('article');
-        card.className = 'project-card';
-        card.innerHTML = `
-          <div class="project-name">${escapeHtml(project.name)}</div>
-          <div class="project-meta">
-            <span>❤ ${project.likes}</span>
-            <span>★ ${project.favorites}</span>
-          </div>
-        `;
-        card.addEventListener('click', () => {
-          window.location.href = `/projects/${project.id}`;
-        });
-        container.appendChild(card);
-      }
-    }
+    const projectState = new Map();
+    const appState = {
+      authenticated: false,
+      currentUserId: null
+    };
+    let csrfToken = null;
+    let errorTimer = null;
 
     function escapeHtml(text) {
-      return text.replace(/[&<>"']/g, c => ({
+      return String(text || '').replace(/[&<>"']/g, c => ({
         '&': '&amp;',
         '<': '&lt;',
         '>': '&gt;',
@@ -319,10 +359,206 @@
       })[c] || c);
     }
 
+    function showError(message, temporary = false) {
+      if (errorTimer) {
+        clearTimeout(errorTimer);
+        errorTimer = null;
+      }
+      errorBox.textContent = message;
+      errorBox.style.display = 'block';
+      if (temporary) {
+        errorTimer = setTimeout(() => {
+          errorBox.style.display = 'none';
+        }, 3000);
+      }
+    }
+
+    function hideError() {
+      if (errorTimer) clearTimeout(errorTimer);
+      errorTimer = null;
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
+
+    async function fetchCsrf() {
+      if (csrfToken) return csrfToken;
+      const res = await fetch('/api/csrf-token', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch CSRF token');
+      const data = await res.json();
+      csrfToken = data.csrfToken;
+      return csrfToken;
+    }
+
+    async function ensureCsrf() {
+      if (!csrfToken) {
+        await fetchCsrf();
+      }
+      return csrfToken;
+    }
+
+    function ensureProjectRecord(project) {
+      const existing = projectState.get(project.id) || {};
+      const ownerId = project.ownerId ?? existing.ownerId ?? null;
+      let ownerName = project.ownerName ?? existing.ownerName;
+      if (!ownerName) {
+        if (ownerId && appState.currentUserId && Number(ownerId) === Number(appState.currentUserId)) {
+          ownerName = 'You';
+        } else if (ownerId) {
+          ownerName = `Player ${ownerId}`;
+        } else {
+          ownerName = 'Player';
+        }
+      }
+      const record = {
+        id: project.id,
+        name: project.name || existing.name || 'Untitled Project',
+        ownerId,
+        ownerName,
+        likes: Number(project.likes ?? existing.likes ?? 0),
+        favorites: Number(project.favorites ?? existing.favorites ?? 0),
+        liked: Boolean(project.liked ?? existing.liked ?? false),
+        favorited: Boolean(project.favorited ?? existing.favorited ?? false)
+      };
+      projectState.set(project.id, record);
+      return record;
+    }
+
+    function updateProjectCard(card, record) {
+      const nameEl = card.querySelector('.project-name');
+      const ownerEl = card.querySelector('.project-owner');
+      const likeBtn = card.querySelector('.reaction-button[data-action="like"]');
+      const likeCount = likeBtn.querySelector('.count');
+      const favoriteBtn = card.querySelector('.reaction-button[data-action="favorite"]');
+      const favoriteCount = favoriteBtn.querySelector('.count');
+
+      nameEl.textContent = record.name;
+      ownerEl.textContent = `👤 ${record.ownerName}`;
+
+      likeBtn.classList.toggle('active', record.liked);
+      likeBtn.setAttribute('aria-pressed', record.liked ? 'true' : 'false');
+      likeCount.textContent = record.likes;
+
+      favoriteBtn.classList.toggle('active', record.favorited);
+      favoriteBtn.setAttribute('aria-pressed', record.favorited ? 'true' : 'false');
+      favoriteCount.textContent = record.favorites;
+
+      if (!appState.authenticated) {
+        likeBtn.disabled = true;
+        favoriteBtn.disabled = true;
+      } else {
+        likeBtn.disabled = false;
+        favoriteBtn.disabled = false;
+      }
+    }
+
+    function updateProjectDisplays(projectId) {
+      const record = projectState.get(projectId);
+      if (!record) return;
+      const cards = document.querySelectorAll(`.project-card[data-project-id="${projectId}"]`);
+      cards.forEach(card => updateProjectCard(card, record));
+    }
+
+    async function toggleReaction(projectId, type, button) {
+      if (!appState.authenticated) {
+        showError('Sign in to like or favorite projects.', true);
+        return;
+      }
+
+      button.disabled = true;
+      try {
+        await ensureCsrf();
+        const res = await fetch(`/api/public-projects/${projectId}/${type}`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          }
+        });
+        if (res.status === 401) {
+          showError('Sign in to like or favorite projects.', true);
+          button.disabled = false;
+          return;
+        }
+        if (!res.ok) {
+          throw new Error('Failed reaction');
+        }
+        const data = await res.json();
+        if (data && data.project) {
+          const existing = projectState.get(projectId) || {};
+          const record = {
+            ...existing,
+            likes: Number(data.project.likes) || 0,
+            favorites: Number(data.project.favorites) || 0,
+            liked: Boolean(data.project.liked),
+            favorited: Boolean(data.project.favorited)
+          };
+          projectState.set(projectId, record);
+          updateProjectDisplays(projectId);
+          hideError();
+        }
+      } catch (err) {
+        showError('Unable to update project reaction. Please try again later.', true);
+      } finally {
+        if (appState.authenticated) {
+          button.disabled = false;
+        }
+      }
+    }
+
+    function createProjectCard(record) {
+      const card = document.createElement('article');
+      card.className = 'project-card';
+      card.dataset.projectId = record.id;
+      const disabledAttr = appState.authenticated ? '' : 'disabled';
+      card.innerHTML = `
+        <div class="project-name">${escapeHtml(record.name)}</div>
+        <div class="project-meta">
+          <span class="project-owner">👤 ${escapeHtml(record.ownerName)}</span>
+          <div class="reaction-buttons">
+            <button type="button" class="reaction-button${record.liked ? ' active' : ''}" data-action="like" aria-pressed="${record.liked}" ${disabledAttr}>
+              ❤ <span class="count">${record.likes}</span>
+            </button>
+            <button type="button" class="reaction-button${record.favorited ? ' active' : ''}" data-action="favorite" aria-pressed="${record.favorited}" ${disabledAttr}>
+              ★ <span class="count">${record.favorites}</span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        window.location.href = `/projects/${record.id}`;
+      });
+
+      const likeBtn = card.querySelector('[data-action="like"]');
+      const favoriteBtn = card.querySelector('[data-action="favorite"]');
+
+      likeBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleReaction(record.id, 'like', likeBtn);
+      });
+
+      favoriteBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleReaction(record.id, 'favorite', favoriteBtn);
+      });
+
+      updateProjectCard(card, record);
+      return card;
+    }
+
+    function renderProjects(container, items) {
+      container.innerHTML = '';
+      for (const project of items) {
+        const record = ensureProjectRecord(project);
+        container.appendChild(createProjectCard(record));
+      }
+    }
+
     async function fetchProjects() {
       if (state.pending) return;
       state.pending = true;
-      errorBox.style.display = 'none';
+      hideError();
 
       const params = new URLSearchParams();
       if (state.search) params.set('search', state.search);
@@ -340,19 +576,28 @@
           state.filter = data.filter;
         }
 
-        if (!data.authenticated) {
+        appState.authenticated = !!data.authenticated;
+        appState.currentUserId = data.currentUserId;
+        if (!appState.authenticated) {
+          csrfToken = null;
+        } else {
+          fetchCsrf().catch(() => {});
+        }
+
+        if (!appState.authenticated) {
           userSection.style.display = '';
           userProjectsGrid.innerHTML = '';
           userEmpty.textContent = 'Sign in to see your public projects.';
           userEmpty.hidden = false;
-          userInfo.textContent = 'Sign in to explore and share your own public projects.';
+          userInfo.textContent = 'Sign in to explore, like, favorite, and share your own public projects.';
         } else {
           userSection.style.display = '';
           userInfo.textContent = 'These are the projects you have shared publicly.';
           userEmpty.textContent = 'No public projects yet. Toggle a project to public from the editor to showcase it here.';
           if (data.userProjects && data.userProjects.length) {
             userEmpty.hidden = true;
-            renderProjects(userProjectsGrid, data.userProjects);
+            const userItems = data.userProjects.map(p => ({ ...p, ownerName: 'You' }));
+            renderProjects(userProjectsGrid, userItems);
           } else {
             userProjectsGrid.innerHTML = '';
             userEmpty.hidden = false;
@@ -367,8 +612,7 @@
           projectsEmpty.hidden = false;
         }
       } catch (err) {
-        errorBox.textContent = 'Could not load projects right now. Please try again later.';
-        errorBox.style.display = 'block';
+        showError('Could not load projects right now. Please try again later.');
       } finally {
         state.pending = false;
       }

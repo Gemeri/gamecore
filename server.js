@@ -246,7 +246,33 @@ function sendPublicProjectFile(res, ownerId, slug, projectNumericId, relPath) {
     if (!fs.existsSync(base)) return res.status(404).end();
     const full = path.resolve(base, normalized);
     if (full !== base && !full.startsWith(base + path.sep)) throw new Error('bad path');
-    if (!fs.existsSync(full)) return res.status(404).end();
+    if (!fs.existsSync(full)) {
+      if (normalized === 'index.html') {
+        return res
+          .status(200)
+          .type('text/html')
+          .send(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Missing index.html</title>
+    <style>
+      body{margin:0;font-family:system-ui,Segoe UI,sans-serif;background:#080512;color:#EEE9FF;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:24px;}
+      main{max-width:540px;background:rgba(28,19,50,0.85);border:1px solid rgba(255,255,255,0.12);border-radius:18px;box-shadow:0 18px 40px rgba(0,0,0,0.45);padding:32px;}
+      h1{font-weight:600;margin-bottom:12px;}
+      p{color:#B6B0D4;line-height:1.6;}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Missing start file</h1>
+      <p>This public project does not have an <code>index.html</code> file or it is not accessible. Ask the creator to add one so the project can be played from here.</p>
+    </main>
+  </body>
+</html>`);
+      }
+      return res.status(404).end();
+    }
 
     const ctype = mime.lookup(full) || 'application/octet-stream';
     res.setHeader('Content-Type', ctype);
@@ -263,6 +289,92 @@ function sendPublicProjectFile(res, ownerId, slug, projectNumericId, relPath) {
     return res.sendFile(full);
   } catch (err) {
     return res.status(400).end();
+  }
+}
+
+async function handleProjectReaction(req, res, tableName, countColumn) {
+  const projectId = Number.parseInt(req.params.projectId, 10);
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    return res.status(400).json({ error: 'Invalid project id' });
+  }
+
+  const currentUserId = req.session?.userId || (req.user && req.user.id);
+  if (!currentUserId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: projectRows } = await client.query(
+      'SELECT visibility FROM projects WHERE id=$1 FOR UPDATE',
+      [projectId]
+    );
+    const project = projectRows[0];
+    if (!project || project.visibility !== 'public') {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Project not available' });
+    }
+
+    const existing = await client.query(
+      `SELECT 1 FROM ${tableName} WHERE project_id=$1 AND user_id=$2`,
+      [projectId, currentUserId]
+    );
+
+    if (existing.rowCount > 0) {
+      await client.query(
+        `DELETE FROM ${tableName} WHERE project_id=$1 AND user_id=$2`,
+        [projectId, currentUserId]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO ${tableName}(project_id, user_id) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [projectId, currentUserId]
+      );
+    }
+
+    const { rows: countsRows } = await client.query(
+      `UPDATE projects
+          SET ${countColumn} = (SELECT COUNT(*) FROM ${tableName} WHERE project_id=$1),
+              updated_at = NOW()
+        WHERE id=$1
+        RETURNING likes_count, favorites_count`,
+      [projectId]
+    );
+
+    const counts = countsRows[0] || { likes_count: 0, favorites_count: 0 };
+
+    const { rowCount: likedCount } = await client.query(
+      'SELECT 1 FROM project_likes WHERE project_id=$1 AND user_id=$2',
+      [projectId, currentUserId]
+    );
+    const { rowCount: favoritedCount } = await client.query(
+      'SELECT 1 FROM project_favorites WHERE project_id=$1 AND user_id=$2',
+      [projectId, currentUserId]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      project: {
+        id: projectId,
+        likes: Number(counts.likes_count) || 0,
+        favorites: Number(counts.favorites_count) || 0,
+        liked: likedCount > 0,
+        favorited: favoritedCount > 0
+      }
+    });
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      console.error('Failed to rollback reaction transaction', rollbackErr);
+    }
+    console.error('Failed to toggle project reaction', err);
+    return res.status(500).json({ error: 'Failed to update project' });
+  } finally {
+    client.release();
   }
 }
 
@@ -1130,6 +1242,16 @@ app.get('/api/public-projects', async (req, res) => {
       whereClause += ` AND p.name ILIKE $${params.length}`;
     }
 
+    const currentUserId = req.session?.userId || (req.user && req.user.id);
+    let reactionSelect = '';
+    if (currentUserId) {
+      params.push(currentUserId);
+      const userParamIndex = params.length;
+      reactionSelect = `,
+              EXISTS(SELECT 1 FROM project_likes pl WHERE pl.project_id = p.id AND pl.user_id = $${userParamIndex}) AS liked_by_user,
+              EXISTS(SELECT 1 FROM project_favorites pf WHERE pf.project_id = p.id AND pf.user_id = $${userParamIndex}) AS favorited_by_user`;
+    }
+
     let orderClause = 'ORDER BY p.updated_at DESC, p.likes_count DESC';
     if (filter === 'trending') {
       orderClause = 'ORDER BY (p.likes_count + p.favorites_count) DESC, p.updated_at DESC';
@@ -1141,7 +1263,7 @@ app.get('/api/public-projects', async (req, res) => {
 
     const { rows } = await pool.query(
       `SELECT p.id, p.slug, p.name, p.likes_count, p.favorites_count, p.updated_at, p.owner_id,
-              COALESCE(NULLIF(u.nickname, ''), 'Player ' || p.owner_id::text) AS owner_name
+              COALESCE(NULLIF(u.nickname, ''), 'Player ' || p.owner_id::text) AS owner_name${reactionSelect}
          FROM projects p
          LEFT JOIN users u ON u.id = p.owner_id
          ${whereClause}
@@ -1158,17 +1280,20 @@ app.get('/api/public-projects', async (req, res) => {
       favorites: Number(row.favorites_count) || 0,
       ownerId: row.owner_id,
       ownerName: row.owner_name,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      liked: Boolean(row.liked_by_user),
+      favorited: Boolean(row.favorited_by_user)
     }));
 
-    const currentUserId = req.session?.userId || (req.user && req.user.id);
     let userProjects = [];
     if (currentUserId) {
       const { rows: userRows } = await pool.query(
-        `SELECT id, slug, name, likes_count, favorites_count, updated_at
-           FROM projects
-           WHERE owner_id=$1 AND visibility='public'
-           ORDER BY updated_at DESC
+        `SELECT p.id, p.slug, p.name, p.owner_id, p.likes_count, p.favorites_count, p.updated_at,
+                EXISTS(SELECT 1 FROM project_likes pl WHERE pl.project_id = p.id AND pl.user_id = $1) AS liked_by_user,
+                EXISTS(SELECT 1 FROM project_favorites pf WHERE pf.project_id = p.id AND pf.user_id = $1) AS favorited_by_user
+           FROM projects p
+           WHERE p.owner_id=$1 AND p.visibility='public'
+           ORDER BY p.updated_at DESC
            LIMIT 50`,
         [currentUserId]
       );
@@ -1176,13 +1301,23 @@ app.get('/api/public-projects', async (req, res) => {
         id: row.id,
         slug: row.slug,
         name: row.name,
+        ownerId: row.owner_id,
         likes: Number(row.likes_count) || 0,
         favorites: Number(row.favorites_count) || 0,
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
+        liked: Boolean(row.liked_by_user),
+        favorited: Boolean(row.favorited_by_user)
       }));
     }
 
-    res.json({ projects, userProjects, filter, search, authenticated: !!currentUserId });
+    res.json({
+      projects,
+      userProjects,
+      filter,
+      search,
+      authenticated: !!currentUserId,
+      currentUserId: currentUserId ? Number(currentUserId) : null
+    });
   } catch (err) {
     console.error('Failed to fetch public projects', err);
     res.status(500).json({ error: 'Failed to fetch projects' });
@@ -1196,21 +1331,30 @@ app.get('/api/public-projects/:projectId', async (req, res) => {
   }
 
   try {
+    const params = [projectId];
+    const currentUserId = req.session?.userId || (req.user && req.user.id);
+    let reactionSelect = '';
+    if (currentUserId) {
+      params.push(currentUserId);
+      const userParamIndex = params.length;
+      reactionSelect = `,
+              EXISTS(SELECT 1 FROM project_likes pl WHERE pl.project_id = p.id AND pl.user_id = $${userParamIndex}) AS liked_by_user,
+              EXISTS(SELECT 1 FROM project_favorites pf WHERE pf.project_id = p.id AND pf.user_id = $${userParamIndex}) AS favorited_by_user`;
+    }
+
     const { rows } = await pool.query(
       `SELECT p.id, p.slug, p.name, p.likes_count, p.favorites_count, p.owner_id, p.visibility,
-              COALESCE(NULLIF(u.nickname, ''), 'Player ' || p.owner_id::text) AS owner_name
+              COALESCE(NULLIF(u.nickname, ''), 'Player ' || p.owner_id::text) AS owner_name${reactionSelect}
          FROM projects p
          LEFT JOIN users u ON u.id = p.owner_id
         WHERE p.id = $1`,
-      [projectId]
+      params
     );
 
     const project = rows[0];
     if (!project || project.visibility !== 'public') {
       return res.status(404).json({ error: 'Project not found' });
     }
-
-    const currentUserId = req.session?.userId || (req.user && req.user.id);
 
     res.json({
       project: {
@@ -1220,7 +1364,9 @@ app.get('/api/public-projects/:projectId', async (req, res) => {
         likes: Number(project.likes_count) || 0,
         favorites: Number(project.favorites_count) || 0,
         ownerId: project.owner_id,
-        ownerName: project.owner_name
+        ownerName: project.owner_name,
+        liked: Boolean(project.liked_by_user),
+        favorited: Boolean(project.favorited_by_user)
       },
       authenticated: !!currentUserId,
       isOwner: currentUserId ? Number(currentUserId) === Number(project.owner_id) : false
@@ -1300,6 +1446,14 @@ app.post('/api/public-projects/:projectId/copy', ensureAuth, ensureProjectContex
     res.status(500).json({ error: 'Failed to copy project' });
   }
 });
+
+app.post('/api/public-projects/:projectId/like', ensureAuth, (req, res) =>
+  handleProjectReaction(req, res, 'project_likes', 'likes_count')
+);
+
+app.post('/api/public-projects/:projectId/favorite', ensureAuth, (req, res) =>
+  handleProjectReaction(req, res, 'project_favorites', 'favorites_count')
+);
 
 app.get('/public-preview/:projectId', async (req, res) => {
   const projectId = Number.parseInt(req.params.projectId, 10);
