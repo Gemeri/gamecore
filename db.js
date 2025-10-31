@@ -47,6 +47,59 @@ async function init() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id SERIAL PRIMARY KEY,
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      likes_count INTEGER NOT NULL DEFAULT 0,
+      favorites_count INTEGER NOT NULL DEFAULT 0,
+      visibility TEXT NOT NULL DEFAULT 'private',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(owner_id, slug)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS projects_visibility_idx ON projects(visibility);
+  `);
+
+  await pool.query(`
+    ALTER TABLE projects
+      ADD COLUMN IF NOT EXISTS slug TEXT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE projects
+      ADD COLUMN IF NOT EXISTS likes_count INTEGER NOT NULL DEFAULT 0;
+  `);
+
+  await pool.query(`
+    ALTER TABLE projects
+      ADD COLUMN IF NOT EXISTS favorites_count INTEGER NOT NULL DEFAULT 0;
+  `);
+
+  await pool.query(`
+    ALTER TABLE projects
+      ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private';
+  `);
+
+  await pool.query(`
+    ALTER TABLE projects
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+  `);
+
+  await pool.query(`
+    UPDATE projects SET slug = 'legacy-project' || id::text WHERE slug IS NULL;
+  `);
+
+  await pool.query(`
+    ALTER TABLE projects
+      ALTER COLUMN slug SET NOT NULL;
+  `);
 }
 
 init().catch(err => console.error('DB init error', err));
