@@ -36,6 +36,9 @@ const PREVIEW_HTTP = `http://${PREVIEW_HOST}:${PREVIEW_PORT}`;
 const PREVIEW_HTTPS = `https://${PREVIEW_HOST}:${PREVIEW_PORT}`;
 const PREVIEW_TOKEN_TTL_MS = 10 * 60 * 1000;
 const previewTokens = new Map();
+const PROJECTS_DIR = 'projects';
+const PROJECT_META = 'projects.json';
+const RESERVED_PROJECT_NAMES = new Set([PROJECTS_DIR, PROJECT_META]);
 const MAX_FAILS = 10;
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
 const BAN_MS = 30 * 60 * 1000;
@@ -114,7 +117,9 @@ app.use(helmet({
 }));
 
 function genPaths(req, ...sub) {
-  return path.join(__dirname, 'generated', String(req.session?.userId || (req.user && req.user.id) || 'global'), ...sub);
+  const projectId = req.session?.selectedProject || 'draft';
+  const root = ensureProjectRoot(req, projectId);
+  return path.join(root, ...sub);
 }
 
 const storage = multer.diskStorage({
@@ -147,6 +152,120 @@ function ensureDirs(req) {
   ];
   dirs.forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  });
+}
+
+function getUserId(req) {
+  return String(req.session?.userId || (req.user && req.user.id) || 'global');
+}
+
+function getUserBasePath(req) {
+  return path.join(__dirname, 'generated', getUserId(req));
+}
+
+function loadProjectList(req) {
+  ensureDirs(req);
+  const metaPath = path.join(getUserBasePath(req), PROJECT_META);
+  if (!fs.existsSync(metaPath)) return [];
+  try {
+    const raw = fs.readFileSync(metaPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(p => p && typeof p.id === 'string' && p.id.trim())
+      .map(p => ({
+        id: p.id,
+        name: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : 'Untitled Project',
+        visibility: p.visibility === 'public' ? 'public' : 'private'
+      }));
+  } catch (err) {
+    console.error('Failed to read project metadata', err);
+    return [];
+  }
+}
+
+function saveProjectList(req, projects) {
+  ensureDirs(req);
+  const metaPath = path.join(getUserBasePath(req), PROJECT_META);
+  fs.writeFileSync(metaPath, JSON.stringify(projects, null, 2));
+}
+
+function getProjectRoot(req, projectId) {
+  const base = getUserBasePath(req);
+  if (projectId && projectId !== 'draft') {
+    return path.join(base, PROJECTS_DIR, projectId);
+  }
+  return base;
+}
+
+function ensureProjectRoot(req, projectId) {
+  ensureDirs(req);
+  const base = getUserBasePath(req);
+  if (projectId && projectId !== 'draft') {
+    const projectsDir = path.join(base, PROJECTS_DIR);
+    if (!fs.existsSync(projectsDir)) fs.mkdirSync(projectsDir, { recursive: true });
+    const target = path.join(projectsDir, projectId);
+    if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true });
+    return target;
+  }
+  return base;
+}
+
+function ensureActiveProject(req) {
+  const projects = loadProjectList(req);
+  let active = req.session?.selectedProject || 'draft';
+  if (active !== 'draft' && !projects.some(p => p.id === active)) {
+    active = 'draft';
+    if (req.session) req.session.selectedProject = 'draft';
+  }
+  ensureProjectRoot(req, active);
+  return { active, projects };
+}
+
+function ensureProjectContext(req, res, next) {
+  try {
+    const { active, projects } = ensureActiveProject(req);
+    req.currentProjectId = active;
+    req.projectList = projects;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+function generateProjectId(name, existing) {
+  const base = (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'project';
+  let candidate = base;
+  let counter = 1;
+  while (existing.has(candidate) || candidate === 'draft') {
+    candidate = `${base}-${counter++}`;
+  }
+  return candidate;
+}
+
+function copyProjectContents(srcDir, destDir) {
+  if (!fs.existsSync(srcDir)) return;
+  fs.mkdirSync(destDir, { recursive: true });
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (RESERVED_PROJECT_NAMES.has(entry.name)) continue;
+    const from = path.join(srcDir, entry.name);
+    const to = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      fs.cpSync(from, to, { recursive: true, force: true });
+    } else {
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.copyFileSync(from, to);
+    }
+  }
+}
+
+function clearProjectContents(dir) {
+  if (!fs.existsSync(dir)) return;
+  fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+    if (RESERVED_PROJECT_NAMES.has(entry.name)) return;
+    const target = path.join(dir, entry.name);
+    fs.rmSync(target, { recursive: true, force: true });
   });
 }
 
@@ -315,7 +434,7 @@ app.use(
   ['/files','/save-file','/create-directory','/delete-file','/move-file','/duplicate-path','/create-apk',
    '/generate-image','/generate-code','/edit-code','/upload-for-code','/continue-code'],
   ensureAuth,
-  (req, res, next) => { ensureDirs(req); next(); }
+  ensureProjectContext
 );
 
 function ensureAuth(req, res, next) {
@@ -393,8 +512,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 
-app.use('/generated', ensureAuth, (req, res, next) => {
-  ensureDirs(req);
+app.use('/generated', ensureAuth, ensureProjectContext, (req, res, next) => {
   return express.static(genPaths(req), {
     setHeaders(res, filePath) {
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -404,10 +522,8 @@ app.use('/generated', ensureAuth, (req, res, next) => {
   })(req, res, next);
 });
 
-app.use('/project', ensureAuth, (req, res) => {
+app.use('/project', ensureAuth, ensureProjectContext, (req, res) => {
   try {
-    ensureDirs(req);
-
     const rel = (req.path || '').replace(/^\/+/, ''); // regex
     const fullPath = safeJoin(req, rel); // reuses safety checks
 
@@ -454,12 +570,11 @@ app.get('/api/status', (req, res) => {
     res.json({ authenticated: !!(req.session.userId || (req.isAuthenticated && req.isAuthenticated())) });
 });
 
-app.post('/api/preview-url', ensureAuth, (req, res, next) => csrfProtection(req, res, next), (req, res) => {
+app.post('/api/preview-url', ensureAuth, ensureProjectContext, (req, res, next) => csrfProtection(req, res, next), (req, res) => {
   try {
     const rawFile = String(req.body.file || 'index.html').replace(/\\/g, '/').replace(/^\/+/, ''); //regex
     if (rawFile.split('/').some(p => p === '..')) return res.status(400).json({ error: 'bad path' });
 
-    ensureDirs(req);
     const uid = String(req.session?.userId || (req.user && req.user.id) || 'global');
     const token = newPreviewToken(uid);
     const url = `${PREVIEW_HTTP}/p/${token}/${encodeURI(rawFile)}`;
@@ -777,6 +892,112 @@ app.post('/api/profile', ensureAuth, validate(profileSchema), async (req, res) =
   const { nickname } = req.body;
   await pool.query('UPDATE users SET nickname=$1 WHERE id=$2', [nickname, id]);
   res.json({ success: true });
+});
+
+app.get('/api/projects', ensureAuth, ensureProjectContext, (req, res) => {
+  res.json({ projects: req.projectList || [], active: req.currentProjectId || 'draft' });
+});
+
+app.post('/api/projects', ensureAuth, ensureProjectContext, (req, res) => {
+  try {
+    const { name, visibility } = req.body || {};
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    if (!trimmed) {
+      return res.status(400).json({ error: 'Project name is required' });
+    }
+    const safeName = trimmed.slice(0, 80);
+    const vis = visibility === 'public' ? 'public' : 'private';
+
+    const projects = req.projectList || loadProjectList(req);
+    const existingIds = new Set(projects.map(p => p.id));
+    const newId = generateProjectId(safeName, existingIds);
+
+    const sourceId = req.currentProjectId || req.session?.selectedProject || 'draft';
+    const sourceDir = ensureProjectRoot(req, sourceId);
+    const destDir = ensureProjectRoot(req, newId);
+
+    copyProjectContents(sourceDir, destDir);
+    if (sourceId === 'draft') {
+      clearProjectContents(sourceDir);
+    }
+
+    const newProject = { id: newId, name: safeName, visibility: vis };
+    projects.push(newProject);
+    saveProjectList(req, projects);
+
+    if (req.session) req.session.selectedProject = newId;
+    req.currentProjectId = newId;
+    req.projectList = projects;
+
+    res.json({ project: newProject, projects, active: newId });
+  } catch (err) {
+    console.error('Failed to create project', err);
+    res.status(500).json({ error: 'Failed to create project' });
+  }
+});
+
+app.post('/api/projects/select', ensureAuth, ensureProjectContext, (req, res) => {
+  try {
+    const { id } = req.body || {};
+    const targetId = (!id || id === 'draft') ? 'draft' : String(id);
+    const projects = req.projectList || loadProjectList(req);
+    if (targetId !== 'draft' && !projects.some(p => p.id === targetId)) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (req.session) req.session.selectedProject = targetId;
+    req.currentProjectId = targetId;
+    ensureProjectRoot(req, targetId);
+    res.json({ projects, active: targetId });
+  } catch (err) {
+    console.error('Failed to switch project', err);
+    res.status(500).json({ error: 'Failed to switch project' });
+  }
+});
+
+app.post('/api/projects/update', ensureAuth, ensureProjectContext, (req, res) => {
+  try {
+    const { id, name, visibility } = req.body || {};
+    if (!id || typeof id !== 'string' || id === 'draft') {
+      return res.status(400).json({ error: 'Invalid project id' });
+    }
+    const projects = req.projectList || loadProjectList(req);
+    const idx = projects.findIndex(p => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const updated = { ...projects[idx] };
+    let changed = false;
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Project name is required' });
+      }
+      const safeName = name.trim().slice(0, 80);
+      if (updated.name !== safeName) {
+        updated.name = safeName;
+        changed = true;
+      }
+    }
+
+    if (visibility === 'public' || visibility === 'private') {
+      if (updated.visibility !== visibility) {
+        updated.visibility = visibility;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      projects[idx] = updated;
+      saveProjectList(req, projects);
+      req.projectList = projects;
+    }
+
+    res.json({ project: updated, projects, active: req.currentProjectId || id });
+  } catch (err) {
+    console.error('Failed to update project', err);
+    res.status(500).json({ error: 'Failed to update project' });
+  }
 });
 
 
@@ -1561,6 +1782,7 @@ function projInfo(req) {
     fs.readdirSync(dir, { withFileTypes: true }).forEach(d => {
       const f = d.name;
       if (f === 'uploads' || f === '__pycache__' || f.endsWith('.pyc')) return;
+      if (!rel && RESERVED_PROJECT_NAMES.has(f)) return;
       const full = path.join(dir, f);
       const relative = path.posix.join(rel, f).replace(/\\/g, '/');
       if (d.isDirectory()) {
@@ -2805,8 +3027,7 @@ previewApp.listen(PREVIEW_PORT, PREVIEW_HOST, () => {
   console.log(`Preview server listening at ${PREVIEW_HTTP}`);
 });
 
-app.get(['/preview', '/preview/*'], ensureAuth, (req,res)=>{
-  ensureDirs(req);
+app.get(['/preview', '/preview/*'], ensureAuth, ensureProjectContext, (req,res)=>{
   const rawFile = (req.params[0] || 'index.html').replace(/\\/g,'/').replace(/^\/+/,'');
   if (rawFile.split('/').some(p=>p==='..')) return res.status(400).end();
   const token = newPreviewToken(req.session?.userId || (req.user && req.user.id) || 'global');
