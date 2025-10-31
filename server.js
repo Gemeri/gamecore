@@ -163,6 +163,16 @@ function getUserBasePath(req) {
   return path.join(__dirname, 'generated', getUserId(req));
 }
 
+function getUserBasePathById(userId) {
+  return path.join(__dirname, 'generated', String(userId));
+}
+
+function getProjectRootByUserId(userId, projectId) {
+  const base = getUserBasePathById(userId);
+  if (!projectId || projectId === 'draft') return base;
+  return path.join(base, PROJECTS_DIR, projectId);
+}
+
 function loadProjectList(req) {
   ensureDirs(req);
   const metaPath = path.join(getUserBasePath(req), PROJECT_META);
@@ -222,11 +232,80 @@ function ensureActiveProject(req) {
   return { active, projects };
 }
 
-function ensureProjectContext(req, res, next) {
+function sendPublicProjectFile(res, ownerId, slug, projectNumericId, relPath) {
+  let clean = (relPath || '').replace(/^\/+/, '');
+  if (!clean) clean = 'index.html';
+
+  try {
+    if (!slug) return res.status(404).end();
+    if (path.isAbsolute(clean) || clean.includes('\0')) throw new Error('bad path');
+    const normalized = clean.replace(/\\/g, '/');
+    if (normalized.split('/').some(p => p === '..')) throw new Error('bad path');
+
+    const base = path.resolve(getProjectRootByUserId(ownerId, slug));
+    if (!fs.existsSync(base)) return res.status(404).end();
+    const full = path.resolve(base, normalized);
+    if (full !== base && !full.startsWith(base + path.sep)) throw new Error('bad path');
+    if (!fs.existsSync(full)) return res.status(404).end();
+
+    const ctype = mime.lookup(full) || 'application/octet-stream';
+    res.setHeader('Content-Type', ctype);
+    if (ctype.startsWith('text/html')) {
+      let html = fs.readFileSync(full, 'utf8');
+      if (!/<base\s/i.test(html)) {
+        const baseTag = `<base href="/public-preview/${projectNumericId}/">`;
+        const injected = html.replace(/<head[^>]*>/i, match => `${match}${baseTag}`);
+        html = injected === html ? `${baseTag}\n${html}` : injected;
+      }
+      return res.send(html);
+    }
+
+    return res.sendFile(full);
+  } catch (err) {
+    return res.status(400).end();
+  }
+}
+
+async function syncProjectsToDatabase(userId, projects) {
+  if (!userId || !Array.isArray(projects) || !projects.length) return;
+  const filtered = projects.filter(p => p && p.id && p.id !== 'draft');
+  if (!filtered.length) return;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const project of filtered) {
+      await client.query(
+        `INSERT INTO projects(owner_id, slug, name, visibility)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (owner_id, slug)
+         DO UPDATE SET name = EXCLUDED.name, visibility = EXCLUDED.visibility, updated_at = NOW()`,
+        [userId, project.id, project.name, project.visibility]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function ensureProjectContext(req, res, next) {
   try {
     const { active, projects } = ensureActiveProject(req);
     req.currentProjectId = active;
     req.projectList = projects;
+    const userId = req.session?.userId || (req.user && req.user.id);
+    if (userId) {
+      try {
+        await syncProjectsToDatabase(userId, projects);
+      } catch (err) {
+        console.error('Failed to sync projects to database', err);
+      }
+    }
+
     next();
   } catch (err) {
     next(err);
@@ -489,10 +568,19 @@ const redirects = {
   '/login.html': '/login',
   '/loading.html': '/loading',
   '/suggestions.html': '/suggestions',
+  '/projects.html': '/projects',
 };
 for (const [from, to] of Object.entries(redirects)) {
   app.get(from, (req, res) => res.redirect(301, to));
 }
+
+app.get('/projects', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'projects.html'));
+});
+
+app.get('/projects/:projectId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'project-detail.html'));
+});
 
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, filePath) {
@@ -898,7 +986,7 @@ app.get('/api/projects', ensureAuth, ensureProjectContext, (req, res) => {
   res.json({ projects: req.projectList || [], active: req.currentProjectId || 'draft' });
 });
 
-app.post('/api/projects', ensureAuth, ensureProjectContext, (req, res) => {
+app.post('/api/projects', ensureAuth, ensureProjectContext, async (req, res) => {
   try {
     const { name, visibility } = req.body || {};
     const trimmed = typeof name === 'string' ? name.trim() : '';
@@ -924,6 +1012,21 @@ app.post('/api/projects', ensureAuth, ensureProjectContext, (req, res) => {
     const newProject = { id: newId, name: safeName, visibility: vis };
     projects.push(newProject);
     saveProjectList(req, projects);
+
+    const ownerId = req.session?.userId || (req.user && req.user.id);
+    if (ownerId) {
+      try {
+        await pool.query(
+          `INSERT INTO projects(owner_id, slug, name, visibility)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (owner_id, slug)
+           DO UPDATE SET name = EXCLUDED.name, visibility = EXCLUDED.visibility, updated_at = NOW()`,
+          [ownerId, newId, safeName, vis]
+        );
+      } catch (err) {
+        console.error('Failed to persist project metadata', err);
+      }
+    }
 
     if (req.session) req.session.selectedProject = newId;
     req.currentProjectId = newId;
@@ -954,7 +1057,7 @@ app.post('/api/projects/select', ensureAuth, ensureProjectContext, (req, res) =>
   }
 });
 
-app.post('/api/projects/update', ensureAuth, ensureProjectContext, (req, res) => {
+app.post('/api/projects/update', ensureAuth, ensureProjectContext, async (req, res) => {
   try {
     const { id, name, visibility } = req.body || {};
     if (!id || typeof id !== 'string' || id === 'draft') {
@@ -991,6 +1094,19 @@ app.post('/api/projects/update', ensureAuth, ensureProjectContext, (req, res) =>
       projects[idx] = updated;
       saveProjectList(req, projects);
       req.projectList = projects;
+
+      const ownerId = req.session?.userId || (req.user && req.user.id);
+      if (ownerId) {
+        try {
+          await pool.query(
+            `UPDATE projects SET name=$1, visibility=$2, updated_at=NOW()
+             WHERE owner_id=$3 AND slug=$4`,
+            [updated.name, updated.visibility, ownerId, id]
+          );
+        } catch (err) {
+          console.error('Failed to update project metadata in database', err);
+        }
+      }
     }
 
     res.json({ project: updated, projects, active: req.currentProjectId || id });
@@ -1000,6 +1116,237 @@ app.post('/api/projects/update', ensureAuth, ensureProjectContext, (req, res) =>
   }
 });
 
+app.get('/api/public-projects', async (req, res) => {
+  try {
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const filterParam = typeof req.query.filter === 'string' ? req.query.filter.trim().toLowerCase() : 'relevance';
+    const allowedFilters = new Set(['relevance', 'trending', 'likes', 'favorites']);
+    const filter = allowedFilters.has(filterParam) ? filterParam : 'relevance';
+
+    const params = [];
+    let whereClause = `WHERE p.visibility = 'public'`;
+    if (search) {
+      params.push(`%${search}%`);
+      whereClause += ` AND p.name ILIKE $${params.length}`;
+    }
+
+    let orderClause = 'ORDER BY p.updated_at DESC, p.likes_count DESC';
+    if (filter === 'trending') {
+      orderClause = 'ORDER BY (p.likes_count + p.favorites_count) DESC, p.updated_at DESC';
+    } else if (filter === 'likes') {
+      orderClause = 'ORDER BY p.likes_count DESC, p.updated_at DESC';
+    } else if (filter === 'favorites') {
+      orderClause = 'ORDER BY p.favorites_count DESC, p.updated_at DESC';
+    }
+
+    const { rows } = await pool.query(
+      `SELECT p.id, p.slug, p.name, p.likes_count, p.favorites_count, p.updated_at, p.owner_id,
+              COALESCE(NULLIF(u.nickname, ''), 'Player ' || p.owner_id::text) AS owner_name
+         FROM projects p
+         LEFT JOIN users u ON u.id = p.owner_id
+         ${whereClause}
+         ${orderClause}
+         LIMIT 100`,
+      params
+    );
+
+    const projects = rows.map(row => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      likes: Number(row.likes_count) || 0,
+      favorites: Number(row.favorites_count) || 0,
+      ownerId: row.owner_id,
+      ownerName: row.owner_name,
+      updatedAt: row.updated_at
+    }));
+
+    const currentUserId = req.session?.userId || (req.user && req.user.id);
+    let userProjects = [];
+    if (currentUserId) {
+      const { rows: userRows } = await pool.query(
+        `SELECT id, slug, name, likes_count, favorites_count, updated_at
+           FROM projects
+           WHERE owner_id=$1 AND visibility='public'
+           ORDER BY updated_at DESC
+           LIMIT 50`,
+        [currentUserId]
+      );
+      userProjects = userRows.map(row => ({
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        likes: Number(row.likes_count) || 0,
+        favorites: Number(row.favorites_count) || 0,
+        updatedAt: row.updated_at
+      }));
+    }
+
+    res.json({ projects, userProjects, filter, search, authenticated: !!currentUserId });
+  } catch (err) {
+    console.error('Failed to fetch public projects', err);
+    res.status(500).json({ error: 'Failed to fetch projects' });
+  }
+});
+
+app.get('/api/public-projects/:projectId', async (req, res) => {
+  const projectId = Number.parseInt(req.params.projectId, 10);
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    return res.status(400).json({ error: 'Invalid project id' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.id, p.slug, p.name, p.likes_count, p.favorites_count, p.owner_id, p.visibility,
+              COALESCE(NULLIF(u.nickname, ''), 'Player ' || p.owner_id::text) AS owner_name
+         FROM projects p
+         LEFT JOIN users u ON u.id = p.owner_id
+        WHERE p.id = $1`,
+      [projectId]
+    );
+
+    const project = rows[0];
+    if (!project || project.visibility !== 'public') {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const currentUserId = req.session?.userId || (req.user && req.user.id);
+
+    res.json({
+      project: {
+        id: project.id,
+        slug: project.slug,
+        name: project.name,
+        likes: Number(project.likes_count) || 0,
+        favorites: Number(project.favorites_count) || 0,
+        ownerId: project.owner_id,
+        ownerName: project.owner_name
+      },
+      authenticated: !!currentUserId,
+      isOwner: currentUserId ? Number(currentUserId) === Number(project.owner_id) : false
+    });
+  } catch (err) {
+    console.error('Failed to fetch project detail', err);
+    res.status(500).json({ error: 'Failed to fetch project' });
+  }
+});
+
+app.post('/api/public-projects/:projectId/copy', ensureAuth, ensureProjectContext, async (req, res) => {
+  const projectId = Number.parseInt(req.params.projectId, 10);
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    return res.status(400).json({ error: 'Invalid project id' });
+  }
+
+  const currentUserId = req.session?.userId || (req.user && req.user.id);
+  if (!currentUserId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, slug, name, owner_id, visibility
+         FROM projects
+        WHERE id=$1`,
+      [projectId]
+    );
+    const project = rows[0];
+    if (!project || project.visibility !== 'public') {
+      return res.status(404).json({ error: 'Project not available' });
+    }
+
+    const sourceDir = getProjectRootByUserId(project.owner_id, project.slug);
+    if (!fs.existsSync(sourceDir)) {
+      return res.status(404).json({ error: 'Source project missing' });
+    }
+
+    const projects = req.projectList || loadProjectList(req);
+    const existingIds = new Set(projects.map(p => p.id));
+
+    const baseName = project.name || 'Copied Project';
+    let copyName = baseName.slice(0, 80);
+    let suffix = 1;
+    while (projects.some(p => p.name === copyName)) {
+      const candidate = `${baseName} (Copy ${suffix++})`;
+      copyName = candidate.slice(0, 80);
+    }
+
+    const newId = generateProjectId(copyName, existingIds);
+    const destDir = ensureProjectRoot(req, newId);
+    copyProjectContents(sourceDir, destDir);
+
+    const newProject = { id: newId, name: copyName, visibility: 'private' };
+    projects.push(newProject);
+    saveProjectList(req, projects);
+    req.projectList = projects;
+
+    if (req.session) req.session.selectedProject = newId;
+    req.currentProjectId = newId;
+
+    try {
+      await pool.query(
+        `INSERT INTO projects(owner_id, slug, name, visibility)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (owner_id, slug)
+         DO UPDATE SET name = EXCLUDED.name, visibility = EXCLUDED.visibility, updated_at = NOW()`,
+        [currentUserId, newId, copyName, 'private']
+      );
+    } catch (err) {
+      console.error('Failed to record copied project', err);
+    }
+
+    res.json({ project: newProject, redirect: '/editor' });
+  } catch (err) {
+    console.error('Failed to copy project', err);
+    res.status(500).json({ error: 'Failed to copy project' });
+  }
+});
+
+app.get('/public-preview/:projectId', async (req, res) => {
+  const projectId = Number.parseInt(req.params.projectId, 10);
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    return res.status(404).end();
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT owner_id, slug, visibility FROM projects WHERE id=$1`,
+      [projectId]
+    );
+    const project = rows[0];
+    if (!project || project.visibility !== 'public') {
+      return res.status(404).end();
+    }
+
+    return sendPublicProjectFile(res, project.owner_id, project.slug, projectId, 'index.html');
+  } catch (err) {
+    console.error('Failed to open public preview', err);
+    return res.status(500).end();
+  }
+});
+
+app.get('/public-preview/:projectId/*', async (req, res) => {
+  const projectId = Number.parseInt(req.params.projectId, 10);
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    return res.status(404).end();
+  }
+
+  const rel = req.params[0] || 'index.html';
+  try {
+    const { rows } = await pool.query(
+      `SELECT owner_id, slug, visibility FROM projects WHERE id=$1`,
+      [projectId]
+    );
+    const project = rows[0];
+    if (!project || project.visibility !== 'public') {
+      return res.status(404).end();
+    }
+
+    return sendPublicProjectFile(res, project.owner_id, project.slug, projectId, rel);
+  } catch (err) {
+    console.error('Failed to open public preview asset', err);
+    return res.status(500).end();
+  }
+});
 
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'], state: true }));
 
