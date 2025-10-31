@@ -180,6 +180,23 @@
       transform: translateY(-2px);
     }
 
+    .reaction-btn{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .reaction-btn.active{
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0b0b16;
+      border-color: transparent;
+      box-shadow: 0 12px 24px rgba(139,92,246,0.28);
+    }
+
+    .reaction-btn.active:hover{
+      box-shadow: 0 18px 30px rgba(139,92,246,0.36);
+    }
+
     button[disabled]{
       opacity: .6;
       cursor: not-allowed;
@@ -241,6 +258,8 @@
         <button class="secondary" id="back-btn">← Back to Projects</button>
         <button class="primary" id="play-btn">Play game</button>
         <button class="primary" id="copy-btn">Copy project</button>
+        <button class="secondary reaction-btn" id="like-btn" aria-pressed="false">❤ Like</button>
+        <button class="secondary reaction-btn" id="favorite-btn" aria-pressed="false">★ Favorite</button>
       </div>
       <div class="status" id="status"></div>
     </div>
@@ -260,8 +279,50 @@
     const playBtn = document.getElementById('play-btn');
     const copyBtn = document.getElementById('copy-btn');
     const backBtn = document.getElementById('back-btn');
+    const likeBtn = document.getElementById('like-btn');
+    const favoriteBtn = document.getElementById('favorite-btn');
 
     const projectId = window.location.pathname.split('/').filter(Boolean).pop();
+
+    let csrfToken = null;
+    let allowReactions = false;
+    let projectState = { likes: 0, favorites: 0, liked: false, favorited: false };
+
+    function showStatus(message, type = '') {
+      statusEl.textContent = message || '';
+      statusEl.className = type ? `status ${type}` : 'status';
+    }
+
+    async function fetchCsrf() {
+      if (csrfToken) return csrfToken;
+      const res = await fetch('/api/csrf-token', { credentials: 'include' });
+      const data = await res.json();
+      csrfToken = data.csrfToken;
+      return csrfToken;
+    }
+
+    async function ensureCsrf() {
+      if (!csrfToken) {
+        await fetchCsrf();
+      }
+      return csrfToken;
+    }
+
+    function setReactionButtonsDisabled(disabled) {
+      likeBtn.disabled = disabled;
+      favoriteBtn.disabled = disabled;
+    }
+
+    function updateReactions() {
+      likesEl.textContent = `❤ ${projectState.likes}`;
+      favoritesEl.textContent = `★ ${projectState.favorites}`;
+      likeBtn.classList.toggle('active', projectState.liked);
+      favoriteBtn.classList.toggle('active', projectState.favorited);
+      likeBtn.setAttribute('aria-pressed', projectState.liked ? 'true' : 'false');
+      favoriteBtn.setAttribute('aria-pressed', projectState.favorited ? 'true' : 'false');
+    }
+
+    setReactionButtonsDisabled(true);
 
     backBtn.addEventListener('click', () => {
       window.location.href = '/projects';
@@ -272,17 +333,21 @@
     });
 
     async function copyProject() {
-      statusEl.textContent = 'Copying project...';
-      statusEl.className = 'status';
+      if (copyBtn.disabled) return;
+      showStatus('Copying project...');
       copyBtn.disabled = true;
       try {
+        await ensureCsrf();
         const res = await fetch(`/api/public-projects/${projectId}/copy`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          }
         });
         if (res.status === 401) {
-          statusEl.textContent = 'Please sign in to copy this project.';
-          statusEl.className = 'status error';
+          showStatus('Please sign in to copy this project.', 'error');
           copyBtn.disabled = false;
           setTimeout(() => { window.location.href = '/login'; }, 1200);
           return;
@@ -291,24 +356,72 @@
           throw new Error('Copy failed');
         }
         const data = await res.json();
-        statusEl.textContent = 'Project copied! Redirecting to the editor...';
-        statusEl.className = 'status success';
+        showStatus('Project copied! Redirecting to the editor...', 'success');
         setTimeout(() => {
           window.location.href = (data && data.redirect) ? data.redirect : '/editor';
         }, 800);
       } catch (err) {
-        statusEl.textContent = 'Something went wrong while copying. Please try again later.';
-        statusEl.className = 'status error';
+        showStatus('Something went wrong while copying. Please try again later.', 'error');
         copyBtn.disabled = false;
       }
     }
 
     copyBtn.addEventListener('click', copyProject);
 
+    async function toggleReaction(type, button) {
+      if (!allowReactions || button.disabled) return;
+      button.disabled = true;
+      try {
+        await ensureCsrf();
+        const res = await fetch(`/api/public-projects/${projectId}/${type}`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          }
+        });
+        if (res.status === 401) {
+          showStatus('Please sign in to like or favorite projects.', 'error');
+          setTimeout(() => { window.location.href = '/login'; }, 1200);
+          return;
+        }
+        if (!res.ok) {
+          throw new Error('Failed reaction');
+        }
+        const data = await res.json();
+        if (data && data.project) {
+          projectState = {
+            likes: Number(data.project.likes) || 0,
+            favorites: Number(data.project.favorites) || 0,
+            liked: Boolean(data.project.liked),
+            favorited: Boolean(data.project.favorited)
+          };
+          updateReactions();
+          showStatus('');
+        }
+      } catch (err) {
+        showStatus('Could not update project reaction. Please try again later.', 'error');
+      } finally {
+        button.disabled = !allowReactions;
+      }
+    }
+
+    likeBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      toggleReaction('like', likeBtn);
+    });
+
+    favoriteBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      toggleReaction('favorite', favoriteBtn);
+    });
+
     async function loadProject() {
       try {
         const res = await fetch(`/api/public-projects/${projectId}`);
         if (res.status === 404) {
+          panel.hidden = true;
           notFound.hidden = false;
           return;
         }
@@ -317,22 +430,39 @@
         }
         const data = await res.json();
         const project = data.project;
+        projectState = {
+          likes: Number(project.likes) || 0,
+          favorites: Number(project.favorites) || 0,
+          liked: Boolean(project.liked),
+          favorited: Boolean(project.favorited)
+        };
         projectName.textContent = project.name;
         ownerEl.textContent = `👤 ${project.ownerName}`;
-        likesEl.textContent = `❤ ${project.likes}`;
-        favoritesEl.textContent = `★ ${project.favorites}`;
+        updateReactions();
         panel.hidden = false;
-        statusEl.textContent = '';
+        notFound.hidden = true;
+
         if (!data.authenticated) {
+          allowReactions = false;
           copyBtn.disabled = true;
-          statusEl.textContent = 'Sign in to copy this project to your workspace.';
-        }
-        if (data.isOwner) {
+          setReactionButtonsDisabled(true);
+          showStatus('Sign in to copy, like, or favorite this project.');
+        } else if (data.isOwner) {
+          allowReactions = false;
           copyBtn.disabled = true;
-          statusEl.textContent = 'This is your project. You can edit it directly in the editor.';
+          setReactionButtonsDisabled(true);
+          showStatus('This is your project. You can edit it directly in the editor.');
+        } else {
+          allowReactions = true;
+          copyBtn.disabled = false;
+          setReactionButtonsDisabled(false);
+          showStatus('');
+          fetchCsrf().catch(() => {});
         }
       } catch (err) {
+        panel.hidden = true;
         notFound.hidden = false;
+        showStatus('Could not load this project right now.', 'error');
       }
     }
 

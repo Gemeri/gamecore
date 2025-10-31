@@ -100,6 +100,24 @@ async function init() {
     ALTER TABLE projects
       ALTER COLUMN slug SET NOT NULL;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS project_likes (
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (project_id, user_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS project_favorites (
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (project_id, user_id)
+    );
+  `);
 }
 
 init().catch(err => console.error('DB init error', err));
