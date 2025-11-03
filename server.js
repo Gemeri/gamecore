@@ -173,6 +173,10 @@ function getProjectRootByUserId(userId, projectId) {
   return path.join(base, PROJECTS_DIR, projectId);
 }
 
+function isProjectPublic(visibility) {
+  return typeof visibility === 'string' && visibility.trim().toLowerCase() === 'public';
+}
+
 function loadProjectList(req) {
   ensureDirs(req);
   const metaPath = path.join(getUserBasePath(req), PROJECT_META);
@@ -186,7 +190,7 @@ function loadProjectList(req) {
       .map(p => ({
         id: p.id,
         name: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : 'Untitled Project',
-        visibility: p.visibility === 'public' ? 'public' : 'private'
+        visibility: isProjectPublic(p.visibility) ? 'public' : 'private'
       }));
   } catch (err) {
     console.error('Failed to read project metadata', err);
@@ -311,7 +315,7 @@ async function handleProjectReaction(req, res, tableName, countColumn) {
       [projectId]
     );
     const project = projectRows[0];
-    if (!project || project.visibility !== 'public') {
+    if (!project || !isProjectPublic(project.visibility)) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Project not available' });
     }
@@ -1228,6 +1232,73 @@ app.post('/api/projects/update', ensureAuth, ensureProjectContext, async (req, r
   }
 });
 
+app.post('/api/projects/delete', ensureAuth, ensureProjectContext, async (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id || typeof id !== 'string' || id === 'draft') {
+      return res.status(400).json({ error: 'Invalid project id' });
+    }
+
+    const projects = req.projectList || loadProjectList(req);
+    const idx = projects.findIndex(p => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    projects.splice(idx, 1);
+    saveProjectList(req, projects);
+    req.projectList = projects;
+
+    const userId = req.session?.userId || (req.user && req.user.id);
+    if (userId) {
+      try {
+        await pool.query('DELETE FROM projects WHERE owner_id=$1 AND slug=$2', [userId, id]);
+      } catch (err) {
+        console.error('Failed to delete project from database', err);
+      }
+    }
+
+    try {
+      const projectDir = path.join(getUserBasePath(req), PROJECTS_DIR, id);
+      if (fs.existsSync(projectDir)) {
+        fs.rmSync(projectDir, { recursive: true, force: true });
+      }
+    } catch (err) {
+      console.error('Failed to delete project files', err);
+    }
+
+    let nextActive = req.currentProjectId || 'draft';
+    if (nextActive === id) {
+      nextActive = 'draft';
+    }
+    if (req.session) {
+      if (req.session.selectedProject === id) {
+        req.session.selectedProject = 'draft';
+      } else if (req.session.selectedProject && req.session.selectedProject !== 'draft') {
+        nextActive = req.session.selectedProject;
+      }
+    }
+    if (nextActive !== 'draft' && !projects.some(p => p.id === nextActive)) {
+      nextActive = 'draft';
+      if (req.session) {
+        req.session.selectedProject = 'draft';
+      }
+    }
+
+    if (req.session) {
+      req.session.selectedProject = nextActive;
+    }
+
+    req.currentProjectId = nextActive;
+    ensureProjectRoot(req, nextActive);
+
+    res.json({ projects, active: nextActive });
+  } catch (err) {
+    console.error('Failed to delete project', err);
+    res.status(500).json({ error: 'Failed to delete project' });
+  }
+});
+
 app.get('/api/public-projects', async (req, res) => {
   try {
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
@@ -1236,7 +1307,7 @@ app.get('/api/public-projects', async (req, res) => {
     const filter = allowedFilters.has(filterParam) ? filterParam : 'relevance';
 
     const params = [];
-    let whereClause = `WHERE p.visibility = 'public'`;
+    let whereClause = `WHERE TRIM(LOWER(p.visibility)) = 'public'`;
     if (search) {
       params.push(`%${search}%`);
       whereClause += ` AND p.name ILIKE $${params.length}`;
@@ -1292,7 +1363,7 @@ app.get('/api/public-projects', async (req, res) => {
                 EXISTS(SELECT 1 FROM project_likes pl WHERE pl.project_id = p.id AND pl.user_id = $1) AS liked_by_user,
                 EXISTS(SELECT 1 FROM project_favorites pf WHERE pf.project_id = p.id AND pf.user_id = $1) AS favorited_by_user
            FROM projects p
-           WHERE p.owner_id=$1 AND p.visibility='public'
+           WHERE p.owner_id=$1 AND TRIM(LOWER(p.visibility))='public'
            ORDER BY p.updated_at DESC
            LIMIT 50`,
         [currentUserId]
@@ -1352,7 +1423,7 @@ app.get('/api/public-projects/:projectId', async (req, res) => {
     );
 
     const project = rows[0];
-    if (!project || project.visibility !== 'public') {
+    if (!project || !isProjectPublic(project.visibility)) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
@@ -1396,7 +1467,7 @@ app.post('/api/public-projects/:projectId/copy', ensureAuth, ensureProjectContex
       [projectId]
     );
     const project = rows[0];
-    if (!project || project.visibility !== 'public') {
+    if (!project || !isProjectPublic(project.visibility)) {
       return res.status(404).json({ error: 'Project not available' });
     }
 
@@ -1467,7 +1538,7 @@ app.get('/public-preview/:projectId', async (req, res) => {
       [projectId]
     );
     const project = rows[0];
-    if (!project || project.visibility !== 'public') {
+    if (!project || !isProjectPublic(project.visibility)) {
       return res.status(404).end();
     }
 
@@ -1491,7 +1562,7 @@ app.get('/public-preview/:projectId/*', async (req, res) => {
       [projectId]
     );
     const project = rows[0];
-    if (!project || project.visibility !== 'public') {
+    if (!project || !isProjectPublic(project.visibility)) {
       return res.status(404).end();
     }
 
