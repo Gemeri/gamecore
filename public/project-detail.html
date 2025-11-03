@@ -423,6 +423,7 @@
         if (res.status === 404) {
           panel.hidden = true;
           notFound.hidden = false;
+          notFound.textContent = 'Project not found or is no longer public.';
           return;
         }
         if (!res.ok) {
@@ -447,22 +448,22 @@
           copyBtn.disabled = true;
           setReactionButtonsDisabled(true);
           showStatus('Sign in to copy, like, or favorite this project.');
-        } else if (data.isOwner) {
-          allowReactions = false;
-          copyBtn.disabled = true;
-          setReactionButtonsDisabled(true);
-          showStatus('This is your project. You can edit it directly in the editor.');
         } else {
           allowReactions = true;
-          copyBtn.disabled = false;
           setReactionButtonsDisabled(false);
-          showStatus('');
+          copyBtn.disabled = !!data.isOwner;
+          if (data.isOwner) {
+            showStatus('This is your project. You can edit it in the editor and react to it here.');
+          } else {
+            showStatus('');
+          }
           fetchCsrf().catch(() => {});
         }
       } catch (err) {
+        console.error('Failed to load project detail', err);
         panel.hidden = true;
         notFound.hidden = false;
-        showStatus('Could not load this project right now.', 'error');
+        notFound.textContent = 'Could not load this project right now. Please try again later.';
       }
     }
 

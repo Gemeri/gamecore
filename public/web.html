@@ -487,6 +487,7 @@ body.perf .preview-container{
 
 .confirmation-popup{ text-align: center; }
 .confirmation-popup button{ margin-top: 14px; }
+.confirmation-popup p{ margin: 10px 0 0; color: var(--muted); line-height: 1.5; }
 
 #project-settings{
   margin-top: 18px;
@@ -495,6 +496,37 @@ body.perf .preview-container{
   display: none;
   flex-direction: column;
   gap: 12px;
+}
+
+#project-settings .danger-zone{
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(252,165,165,0.35);
+  display: flex;
+  justify-content: flex-end;
+}
+
+#project-settings .danger-zone button{
+  background: rgba(239,68,68,0.18);
+  border: 1px solid rgba(239,68,68,0.45);
+  color: #fca5a5;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition);
+}
+
+#project-settings .danger-zone button:hover:not(:disabled){
+  transform: translateY(-1px);
+  background: rgba(239,68,68,0.32);
+  border-color: rgba(239,68,68,0.65);
+}
+
+#project-settings .danger-zone button:disabled{
+  opacity: .6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .visibility-toggle{
@@ -851,6 +883,9 @@ body.perf .preview-container{
               <button type="button" data-project-visibility="public">Public</button>
           </div>
       </label>
+      <div class="danger-zone">
+          <button type="button" id="delete-project-btn">Delete Project</button>
+      </div>
   </div>
 </div>
   
@@ -872,6 +907,14 @@ body.perf .preview-container{
     <button id="confirm-btn">Yes</button>
     <button id="cancel-btn">No</button>
     <button class="close-btn" id="close-confirmation-btn">X</button>
+</div>
+
+<div id="delete-project-popup" class="confirmation-popup">
+    <h3>Are you sure you want to delete your project?</h3>
+    <p id="delete-project-message">This action cannot be undone.</p>
+    <button id="delete-project-confirm">Yes</button>
+    <button id="delete-project-cancel">No</button>
+    <button class="close-btn" id="close-delete-project-btn">X</button>
 </div>
 
 <!-- unsupported file type popup -->
@@ -1039,6 +1082,12 @@ const newProjectVisibilityButtons = document.querySelectorAll('[data-new-visibil
 const projectSettingsSection = document.getElementById('project-settings');
 const projectNameInput = document.getElementById('project-name-input');
 const projectVisibilityButtons = document.querySelectorAll('[data-project-visibility]');
+const deleteProjectBtn = document.getElementById('delete-project-btn');
+const deleteProjectPopup = document.getElementById('delete-project-popup');
+const deleteProjectMessage = document.getElementById('delete-project-message');
+const deleteProjectConfirmBtn = document.getElementById('delete-project-confirm');
+const deleteProjectCancelBtn = document.getElementById('delete-project-cancel');
+const closeDeleteProjectBtn = document.getElementById('close-delete-project-btn');
 const projectOptions = JSON.parse(localStorage.getItem('projectOptions') || '{}');
 
 popoutBtn.onclick = async () => {
@@ -1206,9 +1255,11 @@ function updateProjectSettingsUI() {
   const activeProject = getActiveProjectInfo();
   if (!activeProject) {
     projectSettingsSection.style.display = 'none';
+    if (deleteProjectBtn) deleteProjectBtn.disabled = true;
     return;
   }
   projectSettingsSection.style.display = 'flex';
+  if (deleteProjectBtn) deleteProjectBtn.disabled = false;
   if (projectNameInput && document.activeElement !== projectNameInput) {
     projectNameInput.value = activeProject.name || '';
   }
@@ -1334,6 +1385,35 @@ async function updateActiveProject(details) {
   }
 }
 
+async function deleteActiveProject() {
+  const active = getActiveProjectInfo();
+  if (!active) return;
+  const deletedName = active.name || 'Untitled Project';
+  if (deleteProjectConfirmBtn) deleteProjectConfirmBtn.disabled = true;
+  try {
+    const res = await postJSON('/api/projects/delete', { id: active.id });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to delete project');
+    }
+    projectState.list = Array.isArray(data.projects)
+      ? data.projects
+      : (projectState.list || []).filter(p => p && p.id !== active.id);
+    projectState.active = data.active || 'draft';
+    closeModal(deleteProjectPopup);
+    renderProjectDropdown();
+    updateProjectSettingsUI();
+    resetProjectFileState();
+    await loadGeneratedFiles();
+    log(`Deleted project "${deletedName}"`, 'info');
+  } catch (err) {
+    console.error(err);
+    log(err.message || 'Failed to delete project', 'error');
+  } finally {
+    if (deleteProjectConfirmBtn) deleteProjectConfirmBtn.disabled = false;
+  }
+}
+
 function openNewProjectModal() {
   if (!newProjectPopup) return;
   if (newProjectNameInput) {
@@ -1424,6 +1504,32 @@ projectVisibilityButtons.forEach(btn => {
     updateActiveProject({ visibility: value });
   });
 });
+
+if (deleteProjectBtn && deleteProjectPopup) {
+  deleteProjectBtn.addEventListener('click', () => {
+    const active = getActiveProjectInfo();
+    if (!active) return;
+    if (deleteProjectMessage) {
+      const name = active.name || 'Untitled Project';
+      const visibilityNote = active.visibility === 'public'
+        ? 'Deleting it will also remove it from the public projects page.'
+        : 'Deleting it will remove it from your workspace.';
+      deleteProjectMessage.textContent = `"${name}" will be permanently deleted. ${visibilityNote} This action cannot be undone.`;
+    }
+    openModal(deleteProjectPopup);
+  });
+}
+
+[deleteProjectCancelBtn, closeDeleteProjectBtn].forEach(btn => {
+  if (!btn) return;
+  btn.addEventListener('click', () => closeModal(deleteProjectPopup));
+});
+
+if (deleteProjectConfirmBtn) {
+  deleteProjectConfirmBtn.addEventListener('click', () => {
+    deleteActiveProject();
+  });
+}
 
 initializeWorkspace().catch(err => {
   console.error('Failed to initialize workspace', err);
